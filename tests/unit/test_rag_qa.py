@@ -141,7 +141,10 @@ class TestRAGQAWorkflowExecution:
         
         workflow = RAGQAWorkflow(vector_db=mock_vector_db)
         
-        result = workflow.run({"query": "What is Python?"})
+        # Mock the embedding generation to avoid loading real models
+        with patch.object(workflow, '_get_query_embedding') as mock_embed:
+            mock_embed.return_value = np.array([0.1] * 384, dtype=np.float32)
+            result = workflow.run({"query": "What is Python?"})
         
         assert result.status in ["success", "partial"]
         assert result.metadata["workflow"] == "RAGQA"
@@ -154,7 +157,10 @@ class TestRAGQAWorkflowExecution:
         
         workflow = RAGQAWorkflow(vector_db=mock_vector_db)
         
-        result = workflow.run({"query": "What is Python?"})
+        # Mock the embedding generation
+        with patch.object(workflow, '_get_query_embedding') as mock_embed:
+            mock_embed.return_value = np.array([0.1] * 384, dtype=np.float32)
+            result = workflow.run({"query": "What is Python?"})
         
         assert result.status == "partial"
         assert "empty" in result.error.lower() or "no" in result.error.lower()
@@ -165,7 +171,10 @@ class TestRAGQAWorkflowExecution:
         
         workflow = RAGQAWorkflow(vector_db=mock_vector_db)
         
-        result = workflow.run({"query": "What is Python?"})
+        # Mock the embedding generation
+        with patch.object(workflow, '_get_query_embedding') as mock_embed:
+            mock_embed.return_value = np.array([0.1] * 384, dtype=np.float32)
+            result = workflow.run({"query": "What is Python?"})
         
         assert result.status == "partial"
         assert result.metadata["retrieved_count"] == 0
@@ -179,10 +188,13 @@ class TestRAGQAWorkflowExecution:
         
         workflow = RAGQAWorkflow(vector_db=mock_vector_db)
         
-        result = workflow.run({
-            "query": "What is Python?",
-            "threshold": 0.5
-        })
+        # Mock the embedding generation
+        with patch.object(workflow, '_get_query_embedding') as mock_embed:
+            mock_embed.return_value = np.array([0.1] * 384, dtype=np.float32)
+            result = workflow.run({
+                "query": "What is Python?",
+                "threshold": 0.5
+            })
         
         # Only one document should pass the threshold
         assert result.metadata["retrieved_count"] == 1
@@ -193,10 +205,13 @@ class TestRAGQAWorkflowExecution:
         
         workflow = RAGQAWorkflow(vector_db=mock_vector_db)
         
-        result = workflow.run({
-            "query": "What is Python?",
-            "top_k": 1
-        })
+        # Mock the embedding generation
+        with patch.object(workflow, '_get_query_embedding') as mock_embed:
+            mock_embed.return_value = np.array([0.1] * 384, dtype=np.float32)
+            result = workflow.run({
+                "query": "What is Python?",
+                "top_k": 1
+            })
         
         mock_vector_db.search.assert_called_once()
         call_args = mock_vector_db.search.call_args
@@ -225,7 +240,10 @@ class TestRAGQASourceAnnotation:
         
         workflow = RAGQAWorkflow(vector_db=mock_vector_db)
         
-        result = workflow.run({"query": "test query"})
+        # Mock the embedding generation
+        with patch.object(workflow, '_get_query_embedding') as mock_embed:
+            mock_embed.return_value = np.array([0.1] * 384, dtype=np.float32)
+            result = workflow.run({"query": "test query"})
         
         assert "sources" in result.metadata
         assert len(result.metadata["sources"]) == 1
@@ -247,10 +265,13 @@ class TestRAGQASourceAnnotation:
         
         workflow = RAGQAWorkflow(vector_db=mock_vector_db)
         
-        result = workflow.run({
-            "query": "test query",
-            "include_sources": False
-        })
+        # Mock the embedding generation
+        with patch.object(workflow, '_get_query_embedding') as mock_embed:
+            mock_embed.return_value = np.array([0.1] * 384, dtype=np.float32)
+            result = workflow.run({
+                "query": "test query",
+                "include_sources": False
+            })
         
         # Sources should be empty list when disabled
         assert result.metadata["sources"] == []
@@ -273,7 +294,10 @@ class TestRAGQASourceAnnotation:
         
         workflow = RAGQAWorkflow(vector_db=mock_vector_db)
         
-        result = workflow.run({"query": "test query"})
+        # Mock the embedding generation
+        with patch.object(workflow, '_get_query_embedding') as mock_embed:
+            mock_embed.return_value = np.array([0.1] * 384, dtype=np.float32)
+            result = workflow.run({"query": "test query"})
         
         assert len(result.metadata["sources"]) == 3
         
