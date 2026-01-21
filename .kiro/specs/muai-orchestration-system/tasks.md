@@ -180,25 +180,25 @@
     - **属性5: SearchQA降级策略**
     - **验证需求: 2.1-2.5**
 
-- [ ] 12. 实现LessonPack工作流
-  - [ ] 12.1 实现LessonPackWorkflow
+- [x] 12. 实现LessonPack工作流
+  - [x] 12.1 实现LessonPackWorkflow
     - 实现教学计划生成
     - 实现讲解内容生成
     - 实现练习题生成
     - 确保输出符合LessonPack数据结构
     - _需求: 3.1, 3.2, 3.3, 3.5_
   
-  - [ ] 12.2 编写LessonPack工作流的属性测试
+  - [x] 12.2 编写LessonPack工作流的属性测试
     - **属性6: 教学包结构完整性**
     - **验证需求: 3.1, 3.2, 3.3, 3.5**
 
-- [ ] 13. 实现ChatGenerate工作流
-  - [ ] 13.1 实现对话历史存储
+- [-] 13. 实现ChatGenerate工作流
+  - [x] 13.1 实现对话历史存储
     - 创建ChatStorage类，支持对话历史的保存和检索
     - 实现滑动窗口策略
     - _需求: 4.2, 4.4, 4.5, 14.1_
   
-  - [ ] 13.2 实现ChatGenerateWorkflow
+  - [-] 13.2 实现ChatGenerateWorkflow
     - 实现会话创建和ID生成
     - 实现历史检索和上下文构建
     - 实现回复生成和历史更新

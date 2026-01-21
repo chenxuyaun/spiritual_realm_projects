@@ -7,8 +7,10 @@ including search-based Q&A, lesson generation, chat, and RAG.
 
 from mm_orch.workflows.base import BaseWorkflow
 from mm_orch.workflows.search_qa import SearchQAWorkflow
+from mm_orch.workflows.lesson_pack import LessonPackWorkflow
 
 __all__ = [
     "BaseWorkflow",
-    "SearchQAWorkflow"
+    "SearchQAWorkflow",
+    "LessonPackWorkflow"
 ]
