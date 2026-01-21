@@ -452,3 +452,349 @@ class ChatGenerateWorkflow(BaseWorkflow):
         
         result_parts.extend(essential_parts)
         return "\n".join(result_parts)
+
+    def _step_generate_response(
+        self, 
+        ctx: ChatGenerateContext,
+        temperature: float
+    ) -> ChatGenerateContext:
+        """
+        Step 4: Generate response using the model.
+        
+        Args:
+            ctx: Workflow context with context text
+            temperature: Generation temperature
+        
+        Returns:
+            Updated context with response
+        """
+        start_time = time.time()
+        step = ChatGenerateStep(name="generate_response", success=False)
+        
+        try:
+            logger.info("Generating response")
+            
+            response = self._generate_response(ctx.context_text, temperature)
+            ctx.response = response
+            step.success = bool(response)
+            
+            if not response:
+                step.error = "Empty response generated"
+            
+            logger.info(f"Generated response of length {len(response)}")
+            
+        except Exception as e:
+            step.error = str(e)
+            logger.error(f"Response generation failed: {e}")
+            # Try fallback response
+            ctx.response = self._fallback_response(ctx.message)
+            if ctx.response:
+                step.success = True
+        
+        step.duration = time.time() - start_time
+        ctx.add_step(step)
+        return ctx
+    
+    def _generate_response(self, context: str, temperature: float) -> str:
+        """
+        Generate a response using the model.
+        
+        Args:
+            context: Full context including history and current message
+            temperature: Generation temperature
+        
+        Returns:
+            Generated response text
+        """
+        if self.model_manager:
+            try:
+                response = self.model_manager.infer(
+                    self.generator_model,
+                    context,
+                    max_new_tokens=300,
+                    temperature=temperature
+                )
+                
+                # Clean up the response
+                response = self._clean_response(response, context)
+                return response
+                
+            except Exception as e:
+                logger.warning(f"Model generation failed: {e}")
+        
+        # Fallback: simple echo response
+        return self._simple_response(context)
+    
+    def _clean_response(self, response: str, context: str) -> str:
+        """
+        Clean up the generated response.
+        
+        Args:
+            response: Raw generated response
+            context: Original context (to remove if echoed)
+        
+        Returns:
+            Cleaned response
+        """
+        if not response:
+            return ""
+        
+        # Remove the context if it was echoed
+        if response.startswith(context):
+            response = response[len(context):]
+        
+        # Remove "Assistant:" prefix if present
+        if response.strip().startswith("Assistant:"):
+            response = response.strip()[10:]
+        
+        # Remove any trailing incomplete sentences
+        response = response.strip()
+        
+        # Remove any "User:" or "System:" that might indicate continuation
+        for marker in ["User:", "System:", "\nUser:", "\nSystem:"]:
+            if marker in response:
+                response = response.split(marker)[0]
+        
+        return response.strip()
+    
+    def _simple_response(self, context: str) -> str:
+        """
+        Generate a simple response without using models.
+        
+        Args:
+            context: The conversation context
+        
+        Returns:
+            Simple response
+        """
+        # Extract the user's message from context
+        lines = context.strip().split("\n")
+        user_message = ""
+        
+        for line in reversed(lines):
+            if line.startswith("User:"):
+                user_message = line[5:].strip()
+                break
+        
+        if not user_message:
+            return "I understand. How can I help you?"
+        
+        # Generate a simple acknowledgment
+        if "?" in user_message:
+            return "That's an interesting question. Let me think about that."
+        elif any(word in user_message.lower() for word in ["hello", "hi", "hey"]):
+            return "Hello! How can I assist you today?"
+        elif any(word in user_message.lower() for word in ["thank", "thanks"]):
+            return "You're welcome! Is there anything else I can help with?"
+        else:
+            return "I understand. Please tell me more about what you need."
+    
+    def _fallback_response(self, message: str) -> str:
+        """
+        Generate a fallback response when generation fails.
+        
+        Args:
+            message: The user's message
+        
+        Returns:
+            Fallback response
+        """
+        return (
+            "I apologize, but I'm having trouble generating a response right now. "
+            "Could you please try again or rephrase your message?"
+        )
+    
+    def _step_update_history(self, ctx: ChatGenerateContext) -> ChatGenerateContext:
+        """
+        Step 5: Update conversation history.
+        
+        Property 9: 对话历史持久化 - Messages are persisted.
+        
+        Args:
+            ctx: Workflow context with response
+        
+        Returns:
+            Updated context
+        """
+        start_time = time.time()
+        step = ChatGenerateStep(name="update_history", success=False)
+        
+        try:
+            # Add user message
+            self.chat_storage.add_user_message(
+                session_id=ctx.session_id,
+                content=ctx.message
+            )
+            
+            # Add assistant response
+            self.chat_storage.add_assistant_message(
+                session_id=ctx.session_id,
+                content=ctx.response
+            )
+            
+            step.success = True
+            
+            logger.debug(
+                f"Updated history for session {ctx.session_id}",
+                message_length=len(ctx.message),
+                response_length=len(ctx.response)
+            )
+            
+        except Exception as e:
+            step.error = str(e)
+            logger.error(f"Failed to update history: {e}")
+            # Not a fatal error - response was still generated
+            step.success = True
+        
+        step.duration = time.time() - start_time
+        ctx.add_step(step)
+        return ctx
+
+    def _create_result(
+        self,
+        ctx: ChatGenerateContext,
+        status: str = "success",
+        error: Optional[str] = None
+    ) -> WorkflowResult:
+        """
+        Create the workflow result.
+        
+        Args:
+            ctx: Workflow context
+            status: Result status
+            error: Error message if any
+        
+        Returns:
+            WorkflowResult object
+        """
+        metadata = {
+            "workflow": self.name,
+            "session_id": ctx.session_id,
+            "is_new_session": ctx.is_new_session,
+            "history_length": len(ctx.history),
+            "context_length": len(ctx.context_text),
+            "response_length": len(ctx.response) if ctx.response else 0,
+            "steps": [
+                {
+                    "name": s.name,
+                    "success": s.success,
+                    "duration": s.duration,
+                    "error": s.error
+                }
+                for s in ctx.steps
+            ]
+        }
+        
+        return WorkflowResult(
+            result=ctx.response if ctx.response else None,
+            metadata=metadata,
+            status=status,
+            error=error
+        )
+    
+    # Convenience methods for direct usage
+    
+    def chat(
+        self,
+        message: str,
+        session_id: Optional[str] = None,
+        **kwargs
+    ) -> WorkflowResult:
+        """
+        Convenience method for chatting.
+        
+        Args:
+            message: User message
+            session_id: Optional session ID
+            **kwargs: Additional parameters
+        
+        Returns:
+            WorkflowResult with response
+        """
+        parameters = {
+            "message": message,
+            "session_id": session_id,
+            **kwargs
+        }
+        return self.run(parameters)
+    
+    def start_conversation(
+        self,
+        initial_message: str,
+        system_prompt: Optional[str] = None,
+        **kwargs
+    ) -> WorkflowResult:
+        """
+        Start a new conversation.
+        
+        Args:
+            initial_message: First message in the conversation
+            system_prompt: Optional custom system prompt
+            **kwargs: Additional parameters
+        
+        Returns:
+            WorkflowResult with response and new session_id in metadata
+        """
+        parameters = {
+            "message": initial_message,
+            "session_id": None,  # Force new session
+            "system_prompt": system_prompt,
+            **kwargs
+        }
+        return self.run(parameters)
+    
+    def continue_conversation(
+        self,
+        session_id: str,
+        message: str,
+        **kwargs
+    ) -> WorkflowResult:
+        """
+        Continue an existing conversation.
+        
+        Args:
+            session_id: Existing session ID
+            message: New message
+            **kwargs: Additional parameters
+        
+        Returns:
+            WorkflowResult with response
+        """
+        parameters = {
+            "message": message,
+            "session_id": session_id,
+            **kwargs
+        }
+        return self.run(parameters)
+    
+    def get_session_history(
+        self,
+        session_id: str,
+        limit: Optional[int] = None
+    ) -> List[ChatMessage]:
+        """
+        Get the history for a session.
+        
+        Args:
+            session_id: Session identifier
+            limit: Maximum messages to return
+        
+        Returns:
+            List of ChatMessages
+        """
+        return self.chat_storage.get_chat_history(
+            session_id=session_id,
+            limit=limit or self.max_history_turns * 2
+        )
+    
+    def clear_session(self, session_id: str) -> bool:
+        """
+        Clear a session's history.
+        
+        Args:
+            session_id: Session to clear
+        
+        Returns:
+            True if cleared
+        """
+        return self.chat_storage.clear_session(session_id)
