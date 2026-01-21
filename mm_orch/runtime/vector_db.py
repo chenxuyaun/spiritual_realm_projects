@@ -737,6 +737,10 @@ class VectorDBManager:
         """获取文档数量"""
         return len(self._documents)
     
+    def get_document_count(self) -> int:
+        """获取文档数量（方法形式）"""
+        return len(self._documents)
+    
     @property
     def index_size(self) -> int:
         """获取索引中的向量数量"""
