@@ -16,7 +16,6 @@ from mm_orch.orchestrator import get_orchestrator, create_orchestrator
 from mm_orch.router import get_router
 from mm_orch.consciousness.core import get_consciousness
 from mm_orch.logger import get_logger, configure_logger
-from mm_orch.config import get_config
 
 
 logger = get_logger(__name__)
