@@ -14,7 +14,7 @@ from mm_orch.workflows.rag_qa import RAGQAWorkflow
 from mm_orch.workflows.self_ask_search_qa import (
     SelfAskSearchQAWorkflow,
     QuestionDecomposer,
-    AnswerSynthesizer
+    AnswerSynthesizer,
 )
 
 __all__ = [
@@ -25,5 +25,5 @@ __all__ = [
     "RAGQAWorkflow",
     "SelfAskSearchQAWorkflow",
     "QuestionDecomposer",
-    "AnswerSynthesizer"
+    "AnswerSynthesizer",
 ]

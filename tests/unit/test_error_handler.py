@@ -287,3 +287,256 @@ class TestCustomExceptions:
         error = StorageError("Failed to save state")
         
         assert "save state" in error.message
+
+
+# ============================================================================
+# 安全关闭机制测试
+# ============================================================================
+
+from mm_orch.error_handler import (
+    GracefulShutdown,
+    ShutdownResult,
+    get_graceful_shutdown,
+    reset_graceful_shutdown,
+    setup_graceful_shutdown,
+)
+
+
+class TestGracefulShutdown:
+    """测试GracefulShutdown类"""
+    
+    @pytest.fixture(autouse=True)
+    def reset_shutdown(self):
+        """每个测试前后重置关闭管理器"""
+        reset_graceful_shutdown()
+        yield
+        reset_graceful_shutdown()
+    
+    def test_register_save_callback(self):
+        """测试注册保存回调"""
+        manager = GracefulShutdown()
+        
+        def save_callback():
+            return True
+        
+        manager.register_save_callback(save_callback, name="test_save")
+        
+        # 验证回调被注册
+        assert len(manager._shutdown_callbacks) == 1
+    
+    def test_register_cleanup_callback(self):
+        """测试注册清理回调"""
+        manager = GracefulShutdown()
+        
+        def cleanup_callback():
+            pass
+        
+        manager.register_cleanup_callback(cleanup_callback, name="test_cleanup")
+        
+        # 验证回调被注册
+        assert len(manager._cleanup_callbacks) == 1
+    
+    def test_shutdown_executes_all_callbacks(self):
+        """测试关闭时执行所有回调"""
+        manager = GracefulShutdown()
+        
+        executed = []
+        
+        def callback_1():
+            executed.append(1)
+            return True
+        
+        def callback_2():
+            executed.append(2)
+            return True
+        
+        manager.register_save_callback(callback_1, name="cb1")
+        manager.register_save_callback(callback_2, name="cb2")
+        
+        result = manager.shutdown()
+        
+        assert executed == [1, 2]
+        assert result.success is True
+        assert len(result.saved_components) == 2
+    
+    def test_shutdown_handles_failed_callback(self):
+        """测试关闭时处理失败的回调"""
+        manager = GracefulShutdown()
+        
+        def failing_callback():
+            return False
+        
+        manager.register_save_callback(failing_callback, name="failing")
+        
+        result = manager.shutdown()
+        
+        assert result.success is False
+        assert "failing" in result.failed_components
+    
+    def test_shutdown_handles_exception_in_callback(self):
+        """测试关闭时处理回调中的异常"""
+        manager = GracefulShutdown()
+        
+        def exception_callback():
+            raise RuntimeError("Test exception")
+        
+        manager.register_save_callback(exception_callback, name="exception")
+        
+        result = manager.shutdown()
+        
+        assert result.success is False
+        assert "exception" in result.failed_components
+        assert any("Test exception" in err for err in result.errors)
+    
+    def test_shutdown_only_runs_once(self):
+        """测试关闭只执行一次"""
+        manager = GracefulShutdown()
+        
+        call_count = [0]
+        
+        def counting_callback():
+            call_count[0] += 1
+            return True
+        
+        manager.register_save_callback(counting_callback, name="counter")
+        
+        manager.shutdown()
+        manager.shutdown()
+        manager.shutdown()
+        
+        assert call_count[0] == 1
+    
+    def test_is_shutting_down_state(self):
+        """测试关闭状态跟踪"""
+        manager = GracefulShutdown()
+        
+        assert manager.is_shutting_down() is False
+        assert manager.is_shutdown_complete() is False
+        
+        manager.shutdown()
+        
+        assert manager.is_shutting_down() is False
+        assert manager.is_shutdown_complete() is True
+    
+    def test_get_last_result(self):
+        """测试获取最后一次关闭结果"""
+        manager = GracefulShutdown()
+        
+        assert manager.get_last_result() is None
+        
+        manager.register_save_callback(lambda: True, name="test")
+        manager.shutdown(signal_name="SIGTERM")
+        
+        result = manager.get_last_result()
+        assert result is not None
+        assert result.signal_received == "SIGTERM"
+    
+    def test_reset_clears_state(self):
+        """测试重置清除状态"""
+        manager = GracefulShutdown()
+        
+        manager.register_save_callback(lambda: True, name="test")
+        manager.shutdown()
+        
+        assert manager.is_shutdown_complete() is True
+        
+        manager.reset()
+        
+        assert manager.is_shutdown_complete() is False
+        assert manager.get_last_result() is None
+        assert len(manager._shutdown_callbacks) == 0
+    
+    def test_cleanup_callbacks_run_after_save(self):
+        """测试清理回调在保存回调之后运行"""
+        manager = GracefulShutdown()
+        
+        order = []
+        
+        def save_cb():
+            order.append("save")
+            return True
+        
+        def cleanup_cb():
+            order.append("cleanup")
+        
+        manager.register_save_callback(save_cb, name="save")
+        manager.register_cleanup_callback(cleanup_cb, name="cleanup")
+        
+        manager.shutdown()
+        
+        assert order == ["save", "cleanup"]
+    
+    def test_cleanup_runs_even_if_save_fails(self):
+        """测试即使保存失败，清理也会运行"""
+        manager = GracefulShutdown()
+        
+        cleanup_ran = [False]
+        
+        def failing_save():
+            return False
+        
+        def cleanup_cb():
+            cleanup_ran[0] = True
+        
+        manager.register_save_callback(failing_save, name="save")
+        manager.register_cleanup_callback(cleanup_cb, name="cleanup")
+        
+        manager.shutdown()
+        
+        assert cleanup_ran[0] is True
+
+
+class TestGracefulShutdownSingleton:
+    """测试安全关闭管理器的单例模式"""
+    
+    @pytest.fixture(autouse=True)
+    def reset_shutdown(self):
+        """每个测试前后重置关闭管理器"""
+        reset_graceful_shutdown()
+        yield
+        reset_graceful_shutdown()
+    
+    def test_get_graceful_shutdown_returns_singleton(self):
+        """测试get_graceful_shutdown返回单例"""
+        manager1 = get_graceful_shutdown()
+        manager2 = get_graceful_shutdown()
+        
+        assert manager1 is manager2
+    
+    def test_reset_graceful_shutdown_clears_singleton(self):
+        """测试reset_graceful_shutdown清除单例"""
+        manager1 = get_graceful_shutdown()
+        reset_graceful_shutdown()
+        manager2 = get_graceful_shutdown()
+        
+        assert manager1 is not manager2
+
+
+class TestShutdownResult:
+    """测试ShutdownResult数据类"""
+    
+    def test_default_values(self):
+        """测试默认值"""
+        result = ShutdownResult(success=True)
+        
+        assert result.success is True
+        assert result.saved_components == []
+        assert result.failed_components == []
+        assert result.errors == []
+        assert result.signal_received is None
+    
+    def test_with_all_fields(self):
+        """测试所有字段"""
+        result = ShutdownResult(
+            success=False,
+            saved_components=["comp1", "comp2"],
+            failed_components=["comp3"],
+            errors=["Error 1"],
+            signal_received="SIGTERM"
+        )
+        
+        assert result.success is False
+        assert result.saved_components == ["comp1", "comp2"]
+        assert result.failed_components == ["comp3"]
+        assert result.errors == ["Error 1"]
+        assert result.signal_received == "SIGTERM"

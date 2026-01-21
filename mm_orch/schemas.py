@@ -16,6 +16,7 @@ import numpy as np
 
 class WorkflowType(Enum):
     """Supported workflow types in the system."""
+
     SEARCH_QA = "search_qa"
     LESSON_PACK = "lesson_pack"
     CHAT_GENERATE = "chat_generate"
@@ -25,6 +26,7 @@ class WorkflowType(Enum):
 
 class IntentType(Enum):
     """User intent classification types."""
+
     QUESTION_ANSWERING = "qa"
     TEACHING = "teaching"
     CONVERSATION = "conversation"
@@ -34,6 +36,7 @@ class IntentType(Enum):
 
 class WorkflowStatus(Enum):
     """Workflow execution status."""
+
     SUCCESS = "success"
     PARTIAL = "partial"
     FAILED = "failed"
@@ -41,6 +44,7 @@ class WorkflowStatus(Enum):
 
 class MessageRole(Enum):
     """Chat message roles."""
+
     USER = "user"
     ASSISTANT = "assistant"
     SYSTEM = "system"
@@ -48,29 +52,30 @@ class MessageRole(Enum):
 
 class DevelopmentStage(Enum):
     """Development stages for the consciousness system."""
+
     INFANT = "infant"
     CHILD = "child"
     ADOLESCENT = "adolescent"
     ADULT = "adult"
 
 
-
 @dataclass
 class UserRequest:
     """
     User request data structure.
-    
+
     Attributes:
         query: The user's query text
         context: Optional additional context for the request
         session_id: Optional session identifier for multi-turn conversations
         preferences: Optional user preferences for response generation
     """
+
     query: str
     context: Optional[Dict[str, Any]] = None
     session_id: Optional[str] = None
     preferences: Optional[Dict[str, Any]] = None
-    
+
     def __post_init__(self):
         if not self.query or not self.query.strip():
             raise ValueError("Query cannot be empty")
@@ -80,18 +85,19 @@ class UserRequest:
 class WorkflowSelection:
     """
     Workflow selection result from the Router.
-    
+
     Attributes:
         workflow_type: The selected workflow type
         confidence: Confidence score (0.0 to 1.0)
         parameters: Parameters to pass to the workflow
         alternatives: Alternative workflow selections when confidence is low
     """
+
     workflow_type: WorkflowType
     confidence: float
     parameters: Dict[str, Any]
-    alternatives: Optional[List['WorkflowSelection']] = None
-    
+    alternatives: Optional[List["WorkflowSelection"]] = None
+
     def __post_init__(self):
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError("Confidence must be between 0.0 and 1.0")
@@ -101,7 +107,7 @@ class WorkflowSelection:
 class WorkflowResult:
     """
     Workflow execution result.
-    
+
     Attributes:
         result: The main result of the workflow execution
         metadata: Additional metadata about the execution
@@ -109,12 +115,13 @@ class WorkflowResult:
         error: Error message if status is failed or partial
         execution_time: Time taken to execute the workflow in seconds
     """
+
     result: Any
     metadata: Dict[str, Any]
     status: str = "success"
     error: Optional[str] = None
     execution_time: Optional[float] = None
-    
+
     def __post_init__(self):
         valid_statuses = {"success", "partial", "failed"}
         if self.status not in valid_statuses:
@@ -127,18 +134,19 @@ class WorkflowResult:
 class Document:
     """
     Document fragment for RAG system.
-    
+
     Attributes:
         content: The text content of the document
         metadata: Document metadata (source, title, etc.)
         embedding: Optional vector embedding of the content
         doc_id: Unique document identifier
     """
+
     content: str
     metadata: Dict[str, Any]
     embedding: Optional[np.ndarray] = None
     doc_id: Optional[str] = None
-    
+
     def __post_init__(self):
         if self.doc_id is None:
             self.doc_id = str(uuid.uuid4())
@@ -146,12 +154,11 @@ class Document:
             raise ValueError("Document content cannot be empty")
 
 
-
 @dataclass
 class ChatMessage:
     """
     Chat message in a conversation.
-    
+
     Attributes:
         role: The role of the message sender (user, assistant, system)
         content: The message content
@@ -159,12 +166,13 @@ class ChatMessage:
         metadata: Optional additional metadata
         message_id: Unique message identifier
     """
+
     role: str
     content: str
     timestamp: float = field(default_factory=time.time)
     metadata: Optional[Dict[str, Any]] = None
     message_id: Optional[str] = None
-    
+
     def __post_init__(self):
         valid_roles = {"user", "assistant", "system"}
         if self.role not in valid_roles:
@@ -177,7 +185,7 @@ class ChatMessage:
 class ChatSession:
     """
     Chat session containing conversation history.
-    
+
     Attributes:
         session_id: Unique session identifier
         messages: List of chat messages in the session
@@ -185,25 +193,28 @@ class ChatSession:
         updated_at: Unix timestamp of last update
         metadata: Optional session metadata
     """
+
     session_id: str
     messages: List[ChatMessage] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
     metadata: Optional[Dict[str, Any]] = None
-    
-    def add_message(self, role: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> ChatMessage:
+
+    def add_message(
+        self, role: str, content: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> ChatMessage:
         """Add a new message to the session."""
         message = ChatMessage(role=role, content=content, metadata=metadata)
         self.messages.append(message)
         self.updated_at = time.time()
         return message
-    
+
     def get_recent_messages(self, limit: int = 10) -> List[ChatMessage]:
         """Get the most recent messages from the session."""
         return self.messages[-limit:] if self.messages else []
-    
+
     @staticmethod
-    def create_new() -> 'ChatSession':
+    def create_new() -> "ChatSession":
         """Create a new chat session with a unique ID."""
         return ChatSession(session_id=str(uuid.uuid4()))
 
@@ -212,7 +223,7 @@ class ChatSession:
 class ConsciousnessState:
     """
     Consciousness module state.
-    
+
     Attributes:
         self_state: Self model state (capabilities, status, performance)
         world_state: World model state (environment knowledge)
@@ -221,13 +232,16 @@ class ConsciousnessState:
         development_stage: Current development stage
         metacognition_metrics: Metacognition metrics
     """
+
     self_state: Dict[str, Any] = field(default_factory=dict)
     world_state: Dict[str, Any] = field(default_factory=dict)
-    emotion_state: Dict[str, float] = field(default_factory=lambda: {"valence": 0.0, "arousal": 0.5})
+    emotion_state: Dict[str, float] = field(
+        default_factory=lambda: {"valence": 0.0, "arousal": 0.5}
+    )
     motivation_state: Dict[str, Any] = field(default_factory=dict)
     development_stage: str = "adult"
     metacognition_metrics: Dict[str, float] = field(default_factory=dict)
-    
+
     def __post_init__(self):
         valid_stages = {"infant", "child", "adolescent", "adult"}
         if self.development_stage not in valid_stages:
@@ -240,12 +254,11 @@ class ConsciousnessState:
                     raise ValueError(f"{key} must be between -1.0 and 1.0")
 
 
-
 @dataclass
 class LessonPack:
     """
     Teaching content package.
-    
+
     Attributes:
         topic: The lesson topic
         plan: Teaching plan/outline
@@ -253,12 +266,13 @@ class LessonPack:
         exercises: List of exercises with questions and answers
         metadata: Additional metadata
     """
+
     topic: str
     plan: str
     explanation: str
     exercises: List[Dict[str, str]]
     metadata: Dict[str, Any] = field(default_factory=dict)
-    
+
     def __post_init__(self):
         if not self.topic:
             raise ValueError("Topic cannot be empty")
@@ -276,18 +290,19 @@ class LessonPack:
 class StrategySuggestion:
     """
     Strategy suggestion from metacognition module.
-    
+
     Attributes:
         strategy: Suggested strategy name
         confidence: Confidence in the suggestion (0.0 to 1.0)
         reasoning: Explanation for the suggestion
         parameters: Suggested parameters for the strategy
     """
+
     strategy: str
     confidence: float
     reasoning: str
     parameters: Dict[str, Any] = field(default_factory=dict)
-    
+
     def __post_init__(self):
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError("Confidence must be between 0.0 and 1.0")
@@ -297,13 +312,14 @@ class StrategySuggestion:
 class SystemEvent:
     """
     System event for consciousness state updates.
-    
+
     Attributes:
         event_type: Type of the event
         data: Event data
         timestamp: Unix timestamp of the event
         source: Source component of the event
     """
+
     event_type: str
     data: Dict[str, Any]
     timestamp: float = field(default_factory=time.time)
@@ -314,7 +330,7 @@ class SystemEvent:
 class Task:
     """
     Task representation for consciousness processing.
-    
+
     Attributes:
         task_id: Unique task identifier
         task_type: Type of the task
@@ -322,29 +338,26 @@ class Task:
         priority: Task priority (higher = more important)
         created_at: Unix timestamp of task creation
     """
+
     task_id: str
     task_type: str
     parameters: Dict[str, Any]
     priority: int = 0
     created_at: float = field(default_factory=time.time)
-    
+
     @staticmethod
-    def create(task_type: str, parameters: Dict[str, Any], priority: int = 0) -> 'Task':
+    def create(task_type: str, parameters: Dict[str, Any], priority: int = 0) -> "Task":
         """Create a new task with a unique ID."""
         return Task(
-            task_id=str(uuid.uuid4()),
-            task_type=task_type,
-            parameters=parameters,
-            priority=priority
+            task_id=str(uuid.uuid4()), task_type=task_type, parameters=parameters, priority=priority
         )
-
 
 
 @dataclass
 class Evaluation:
     """
     Task result evaluation from consciousness.
-    
+
     Attributes:
         success: Whether the task was successful
         score: Evaluation score (0.0 to 1.0)
@@ -352,12 +365,13 @@ class Evaluation:
         emotion_impact: Impact on emotion state
         motivation_impact: Impact on motivation state
     """
+
     success: bool
     score: float
     feedback: str
     emotion_impact: Dict[str, float] = field(default_factory=dict)
     motivation_impact: Dict[str, Any] = field(default_factory=dict)
-    
+
     def __post_init__(self):
         if not 0.0 <= self.score <= 1.0:
             raise ValueError("Score must be between 0.0 and 1.0")
@@ -367,7 +381,7 @@ class Evaluation:
 class ModelConfig:
     """
     Model configuration.
-    
+
     Attributes:
         name: Model identifier name
         model_path: Path to the model or HuggingFace model ID
@@ -376,13 +390,14 @@ class ModelConfig:
         max_length: Maximum sequence length
         temperature: Generation temperature
     """
+
     name: str
     model_path: str
     device: str = "auto"
     quantization: Optional[str] = None
     max_length: int = 512
     temperature: float = 0.7
-    
+
     def __post_init__(self):
         valid_devices = {"auto", "cuda", "cpu"}
         if self.device not in valid_devices:
@@ -398,7 +413,7 @@ class ModelConfig:
 class SystemConfig:
     """
     System-wide configuration.
-    
+
     Attributes:
         models: Dictionary of model configurations
         vector_db_path: Path to vector database storage
@@ -407,13 +422,14 @@ class SystemConfig:
         max_cached_models: Maximum number of models to cache
         development_stage: Current development stage
     """
+
     models: Dict[str, ModelConfig]
     vector_db_path: str
     storage_path: str
     log_level: str = "INFO"
     max_cached_models: int = 3
     development_stage: str = "adult"
-    
+
     def __post_init__(self):
         valid_log_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
         if self.log_level.upper() not in valid_log_levels:
@@ -427,7 +443,7 @@ class SystemConfig:
 class ErrorResponse:
     """
     Structured error response.
-    
+
     Attributes:
         error_type: Type of the error
         message: Error message
@@ -435,6 +451,7 @@ class ErrorResponse:
         timestamp: Unix timestamp of the error
         context: Context information when error occurred
     """
+
     error_type: str
     message: str
     details: Optional[Dict[str, Any]] = None

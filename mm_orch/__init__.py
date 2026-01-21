@@ -12,7 +12,7 @@ from mm_orch.orchestrator import (
     WorkflowOrchestrator,
     get_orchestrator,
     create_orchestrator,
-    reset_orchestrator
+    reset_orchestrator,
 )
 
 __all__ = [
@@ -24,5 +24,5 @@ __all__ = [
     "WorkflowOrchestrator",
     "get_orchestrator",
     "create_orchestrator",
-    "reset_orchestrator"
+    "reset_orchestrator",
 ]

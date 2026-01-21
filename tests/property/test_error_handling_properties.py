@@ -286,3 +286,244 @@ def test_system_error_handling(message: str):
     
     assert response.error_type == "SystemError"
     assert response.recoverable is False
+
+
+# ============================================================================
+# Property 41: 严重错误安全关闭 测试
+# ============================================================================
+
+from mm_orch.error_handler import (
+    GracefulShutdown,
+    ShutdownResult,
+    get_graceful_shutdown,
+    reset_graceful_shutdown,
+)
+
+
+@pytest.fixture
+def shutdown_manager():
+    """创建一个干净的GracefulShutdown实例用于测试"""
+    reset_graceful_shutdown()
+    manager = GracefulShutdown()
+    yield manager
+    manager.reset()
+
+
+@given(
+    num_callbacks=st.integers(min_value=0, max_value=5),
+    callback_success_pattern=st.lists(
+        st.booleans(),
+        min_size=0,
+        max_size=5
+    )
+)
+def test_property_41_graceful_shutdown_saves_state(
+    num_callbacks: int,
+    callback_success_pattern
+):
+    """
+    Feature: muai-orchestration-system, Property 41: 严重错误安全关闭
+    
+    对于任何严重错误（如内存溢出、系统资源耗尽），系统应该在关闭前
+    保存当前的意识状态和关键数据，且保存操作应该成功完成。
+    
+    **验证需求: 15.5**
+    """
+    manager = GracefulShutdown()
+    
+    # 调整callback_success_pattern的长度以匹配num_callbacks
+    success_pattern = callback_success_pattern[:num_callbacks]
+    while len(success_pattern) < num_callbacks:
+        success_pattern.append(True)
+    
+    # 注册回调
+    callback_results = []
+    for i, should_succeed in enumerate(success_pattern):
+        def make_callback(idx, succeed):
+            def callback():
+                callback_results.append(idx)
+                return succeed
+            callback._callback_name = f"callback_{idx}"
+            return callback
+        
+        manager.register_save_callback(
+            make_callback(i, should_succeed),
+            name=f"callback_{i}"
+        )
+    
+    # 执行关闭
+    result = manager.shutdown()
+    
+    # 验证所有回调都被执行
+    assert len(callback_results) == num_callbacks
+    
+    # 验证回调按顺序执行
+    assert callback_results == list(range(num_callbacks))
+    
+    # 验证结果结构
+    assert isinstance(result, ShutdownResult)
+    assert result.saved_components is not None
+    assert result.failed_components is not None
+    assert result.errors is not None
+    
+    # 验证成功/失败计数
+    expected_success = sum(1 for s in success_pattern if s)
+    expected_failure = sum(1 for s in success_pattern if not s)
+    assert len(result.saved_components) == expected_success
+    assert len(result.failed_components) == expected_failure
+    
+    # 验证整体成功状态
+    if expected_failure > 0:
+        assert result.success is False
+    else:
+        assert result.success is True
+    
+    # 验证关闭状态
+    assert manager.is_shutdown_complete() is True
+    assert manager.is_shutting_down() is False
+
+
+def test_property_41_shutdown_only_executes_once():
+    """
+    Property 41 补充测试: 关闭操作只执行一次
+    
+    验证多次调用shutdown()只会执行一次保存操作。
+    """
+    manager = GracefulShutdown()
+    
+    call_count = [0]
+    
+    def counting_callback():
+        call_count[0] += 1
+        return True
+    
+    manager.register_save_callback(counting_callback, name="counter")
+    
+    # 多次调用shutdown
+    result1 = manager.shutdown()
+    result2 = manager.shutdown()
+    result3 = manager.shutdown()
+    
+    # 验证回调只执行一次
+    assert call_count[0] == 1
+    
+    # 验证所有结果都表示成功
+    assert result1.success is True
+    assert result2.success is True
+    assert result3.success is True
+
+
+def test_property_41_shutdown_handles_callback_exceptions():
+    """
+    Property 41 补充测试: 关闭时处理回调异常
+    
+    验证即使某个回调抛出异常，其他回调仍然会被执行。
+    """
+    manager = GracefulShutdown()
+    
+    executed = []
+    
+    def callback_1():
+        executed.append(1)
+        return True
+    
+    def callback_2():
+        executed.append(2)
+        raise RuntimeError("Simulated error")
+    
+    def callback_3():
+        executed.append(3)
+        return True
+    
+    manager.register_save_callback(callback_1, name="callback_1")
+    manager.register_save_callback(callback_2, name="callback_2")
+    manager.register_save_callback(callback_3, name="callback_3")
+    
+    result = manager.shutdown()
+    
+    # 验证所有回调都被执行
+    assert executed == [1, 2, 3]
+    
+    # 验证结果反映了异常
+    assert "callback_1" in result.saved_components
+    assert "callback_2" in result.failed_components
+    assert "callback_3" in result.saved_components
+    assert any("callback_2" in err for err in result.errors)
+
+
+def test_property_41_cleanup_callbacks_execute_after_save():
+    """
+    Property 41 补充测试: 清理回调在保存回调之后执行
+    
+    验证清理回调的执行顺序。
+    """
+    manager = GracefulShutdown()
+    
+    execution_order = []
+    
+    def save_callback():
+        execution_order.append("save")
+        return True
+    
+    def cleanup_callback():
+        execution_order.append("cleanup")
+    
+    manager.register_save_callback(save_callback, name="save")
+    manager.register_cleanup_callback(cleanup_callback, name="cleanup")
+    
+    manager.shutdown()
+    
+    # 验证执行顺序
+    assert execution_order == ["save", "cleanup"]
+
+
+@given(signal_name=st.sampled_from(["SIGTERM", "SIGINT", "atexit", None]))
+def test_property_41_shutdown_records_signal(signal_name):
+    """
+    Property 41 补充测试: 关闭结果记录触发信号
+    
+    验证ShutdownResult正确记录触发关闭的信号。
+    """
+    manager = GracefulShutdown()
+    
+    result = manager.shutdown(signal_name=signal_name)
+    
+    assert result.signal_received == signal_name
+
+
+def test_graceful_shutdown_singleton():
+    """
+    测试安全关闭管理器的单例模式
+    
+    验证get_graceful_shutdown返回同一个实例。
+    """
+    reset_graceful_shutdown()
+    
+    manager1 = get_graceful_shutdown()
+    manager2 = get_graceful_shutdown()
+    
+    assert manager1 is manager2
+    
+    reset_graceful_shutdown()
+
+
+def test_graceful_shutdown_reset():
+    """
+    测试安全关闭管理器的重置功能
+    
+    验证reset()正确清除状态。
+    """
+    manager = GracefulShutdown()
+    
+    # 注册回调并执行关闭
+    manager.register_save_callback(lambda: True, name="test")
+    manager.shutdown()
+    
+    assert manager.is_shutdown_complete() is True
+    
+    # 重置
+    manager.reset()
+    
+    assert manager.is_shutdown_complete() is False
+    assert manager.is_shutting_down() is False
+    assert manager.get_last_result() is None

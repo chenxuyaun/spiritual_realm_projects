@@ -16,6 +16,7 @@ import time
 
 class WorkflowTypeEnum(str, Enum):
     """工作流类型枚举"""
+
     SEARCH_QA = "search_qa"
     LESSON_PACK = "lesson_pack"
     CHAT_GENERATE = "chat_generate"
@@ -25,19 +26,20 @@ class WorkflowTypeEnum(str, Enum):
 
 # ============ 请求模型 ============
 
+
 class QueryRequest(BaseModel):
     """
     通用查询请求
-    
+
     用于POST /api/query端点，系统自动路由到合适的工作流
     """
+
     query: str = Field(..., min_length=1, max_length=10000, description="用户查询文本")
     context: Optional[Dict[str, Any]] = Field(default=None, description="附加上下文信息")
     session_id: Optional[str] = Field(default=None, description="会话ID（用于多轮对话）")
     preferences: Optional[Dict[str, Any]] = Field(default=None, description="用户偏好设置")
     workflow_type: Optional[WorkflowTypeEnum] = Field(
-        default=None, 
-        description="指定工作流类型（可选，不指定则自动路由）"
+        default=None, description="指定工作流类型（可选，不指定则自动路由）"
     )
 
     class Config:
@@ -47,7 +49,7 @@ class QueryRequest(BaseModel):
                 "context": {"domain": "technology"},
                 "session_id": None,
                 "preferences": {"language": "zh"},
-                "workflow_type": None
+                "workflow_type": None,
             }
         }
 
@@ -55,46 +57,33 @@ class QueryRequest(BaseModel):
 class ChatRequest(BaseModel):
     """
     对话请求
-    
+
     用于POST /api/chat端点
     """
+
     message: str = Field(..., min_length=1, max_length=10000, description="用户消息")
     session_id: Optional[str] = Field(default=None, description="会话ID，不提供则创建新会话")
     context: Optional[Dict[str, Any]] = Field(default=None, description="附加上下文")
 
     class Config:
         json_schema_extra = {
-            "example": {
-                "message": "你好，请介绍一下你自己",
-                "session_id": None,
-                "context": None
-            }
+            "example": {"message": "你好，请介绍一下你自己", "session_id": None, "context": None}
         }
 
 
 class RAGUploadRequest(BaseModel):
     """
     RAG文档上传请求
-    
+
     用于POST /api/rag/upload端点
     """
+
     content: str = Field(..., min_length=1, description="文档内容")
     metadata: Optional[Dict[str, Any]] = Field(
-        default_factory=dict, 
-        description="文档元数据（来源、标题等）"
+        default_factory=dict, description="文档元数据（来源、标题等）"
     )
-    chunk_size: Optional[int] = Field(
-        default=500, 
-        ge=100, 
-        le=2000, 
-        description="文档分块大小"
-    )
-    chunk_overlap: Optional[int] = Field(
-        default=50, 
-        ge=0, 
-        le=500, 
-        description="分块重叠大小"
-    )
+    chunk_size: Optional[int] = Field(default=500, ge=100, le=2000, description="文档分块大小")
+    chunk_overlap: Optional[int] = Field(default=50, ge=0, le=500, description="分块重叠大小")
 
     class Config:
         json_schema_extra = {
@@ -102,7 +91,7 @@ class RAGUploadRequest(BaseModel):
                 "content": "这是一篇关于人工智能的文档...",
                 "metadata": {"source": "wiki", "title": "人工智能简介"},
                 "chunk_size": 500,
-                "chunk_overlap": 50
+                "chunk_overlap": 50,
             }
         }
 
@@ -110,68 +99,51 @@ class RAGUploadRequest(BaseModel):
 class RAGQueryRequest(BaseModel):
     """
     RAG问答请求
-    
+
     用于POST /api/rag/query端点
     """
+
     query: str = Field(..., min_length=1, max_length=5000, description="查询问题")
     top_k: Optional[int] = Field(default=5, ge=1, le=20, description="检索文档数量")
-    threshold: Optional[float] = Field(
-        default=0.0, 
-        ge=0.0, 
-        le=1.0, 
-        description="相似度阈值"
-    )
+    threshold: Optional[float] = Field(default=0.0, ge=0.0, le=1.0, description="相似度阈值")
 
     class Config:
-        json_schema_extra = {
-            "example": {
-                "query": "什么是深度学习？",
-                "top_k": 5,
-                "threshold": 0.5
-            }
-        }
+        json_schema_extra = {"example": {"query": "什么是深度学习？", "top_k": 5, "threshold": 0.5}}
 
 
 class LessonPackRequest(BaseModel):
     """
     教学包生成请求
-    
+
     用于POST /api/lesson端点
     """
+
     topic: str = Field(..., min_length=1, max_length=500, description="课题")
     level: Optional[str] = Field(
-        default="intermediate", 
-        description="难度级别（beginner/intermediate/advanced）"
+        default="intermediate", description="难度级别（beginner/intermediate/advanced）"
     )
-    num_exercises: Optional[int] = Field(
-        default=3, 
-        ge=1, 
-        le=10, 
-        description="练习题数量"
-    )
+    num_exercises: Optional[int] = Field(default=3, ge=1, le=10, description="练习题数量")
 
-    @field_validator('level')
+    @field_validator("level")
     @classmethod
     def validate_level(cls, v):
-        valid_levels = {'beginner', 'intermediate', 'advanced'}
+        valid_levels = {"beginner", "intermediate", "advanced"}
         if v not in valid_levels:
             raise ValueError(f"Level must be one of {valid_levels}")
         return v
 
     class Config:
         json_schema_extra = {
-            "example": {
-                "topic": "Python基础语法",
-                "level": "beginner",
-                "num_exercises": 5
-            }
+            "example": {"topic": "Python基础语法", "level": "beginner", "num_exercises": 5}
         }
 
 
 # ============ 响应模型 ============
 
+
 class ErrorDetail(BaseModel):
     """错误详情"""
+
     code: str = Field(..., description="错误代码")
     message: str = Field(..., description="错误消息")
     details: Optional[Dict[str, Any]] = Field(default=None, description="详细信息")
@@ -180,10 +152,11 @@ class ErrorDetail(BaseModel):
 class ErrorResponse(BaseModel):
     """
     错误响应
-    
+
     属性35: API错误响应格式
     对于任何格式错误的API请求，响应应该包含清晰的错误信息
     """
+
     success: bool = Field(default=False, description="请求是否成功")
     error: ErrorDetail = Field(..., description="错误详情")
     timestamp: float = Field(default_factory=time.time, description="时间戳")
@@ -196,16 +169,17 @@ class ErrorResponse(BaseModel):
                 "error": {
                     "code": "VALIDATION_ERROR",
                     "message": "Query cannot be empty",
-                    "details": {"field": "query"}
+                    "details": {"field": "query"},
                 },
                 "timestamp": 1700000000.0,
-                "request_id": "req_123456"
+                "request_id": "req_123456",
             }
         }
 
 
 class WorkflowResultResponse(BaseModel):
     """工作流执行结果响应"""
+
     success: bool = Field(..., description="执行是否成功")
     result: Optional[Any] = Field(default=None, description="执行结果")
     status: str = Field(..., description="状态（success/partial/failed）")
@@ -225,13 +199,14 @@ class WorkflowResultResponse(BaseModel):
                 "error": None,
                 "execution_time": 1.5,
                 "timestamp": 1700000000.0,
-                "request_id": "req_123456"
+                "request_id": "req_123456",
             }
         }
 
 
 class ChatResponse(BaseModel):
     """对话响应"""
+
     success: bool = Field(..., description="执行是否成功")
     response: Optional[str] = Field(default=None, description="助手回复")
     session_id: str = Field(..., description="会话ID")
@@ -249,13 +224,14 @@ class ChatResponse(BaseModel):
                 "message_id": "msg_xyz789",
                 "timestamp": 1700000000.0,
                 "request_id": "req_123456",
-                "error": None
+                "error": None,
             }
         }
 
 
 class RAGUploadResponse(BaseModel):
     """RAG文档上传响应"""
+
     success: bool = Field(..., description="上传是否成功")
     document_id: Optional[str] = Field(default=None, description="文档ID")
     chunks_count: Optional[int] = Field(default=None, description="分块数量")
@@ -271,13 +247,14 @@ class RAGUploadResponse(BaseModel):
                 "chunks_count": 10,
                 "message": "Document uploaded successfully",
                 "timestamp": 1700000000.0,
-                "request_id": "req_123456"
+                "request_id": "req_123456",
             }
         }
 
 
 class RAGQueryResponse(BaseModel):
     """RAG问答响应"""
+
     success: bool = Field(..., description="查询是否成功")
     answer: Optional[str] = Field(default=None, description="生成的答案")
     sources: List[Dict[str, Any]] = Field(default_factory=list, description="来源文档")
@@ -290,18 +267,17 @@ class RAGQueryResponse(BaseModel):
             "example": {
                 "success": True,
                 "answer": "深度学习是机器学习的一个子领域...",
-                "sources": [
-                    {"doc_id": "doc_1", "content": "...", "score": 0.95}
-                ],
+                "sources": [{"doc_id": "doc_1", "content": "...", "score": 0.95}],
                 "timestamp": 1700000000.0,
                 "request_id": "req_123456",
-                "error": None
+                "error": None,
             }
         }
 
 
 class LessonPackResponse(BaseModel):
     """教学包响应"""
+
     success: bool = Field(..., description="生成是否成功")
     topic: Optional[str] = Field(default=None, description="课题")
     plan: Optional[str] = Field(default=None, description="教学计划")
@@ -318,25 +294,21 @@ class LessonPackResponse(BaseModel):
                 "topic": "Python基础语法",
                 "plan": "1. 变量和数据类型\n2. 控制流...",
                 "explanation": "Python是一种解释型语言...",
-                "exercises": [
-                    {"question": "什么是变量？", "answer": "变量是..."}
-                ],
+                "exercises": [{"question": "什么是变量？", "answer": "变量是..."}],
                 "timestamp": 1700000000.0,
                 "request_id": "req_123456",
-                "error": None
+                "error": None,
             }
         }
 
 
 class SystemStatusResponse(BaseModel):
     """系统状态响应"""
+
     status: str = Field(..., description="系统状态（healthy/degraded/unhealthy）")
     version: str = Field(..., description="系统版本")
     uptime: float = Field(..., description="运行时间（秒）")
-    components: Dict[str, Dict[str, Any]] = Field(
-        default_factory=dict, 
-        description="组件状态"
-    )
+    components: Dict[str, Dict[str, Any]] = Field(default_factory=dict, description="组件状态")
     metrics: Dict[str, Any] = Field(default_factory=dict, description="性能指标")
     timestamp: float = Field(default_factory=time.time, description="时间戳")
 
@@ -349,27 +321,19 @@ class SystemStatusResponse(BaseModel):
                 "components": {
                     "orchestrator": {"status": "healthy", "workflows": 5},
                     "consciousness": {"status": "healthy", "stage": "adult"},
-                    "vector_db": {"status": "healthy", "documents": 100}
+                    "vector_db": {"status": "healthy", "documents": 100},
                 },
-                "metrics": {
-                    "total_requests": 1000,
-                    "success_rate": 0.95,
-                    "avg_response_time": 0.5
-                },
-                "timestamp": 1700000000.0
+                "metrics": {"total_requests": 1000, "success_rate": 0.95, "avg_response_time": 0.5},
+                "timestamp": 1700000000.0,
             }
         }
 
 
 class HealthResponse(BaseModel):
     """健康检查响应"""
+
     status: str = Field(..., description="健康状态")
     timestamp: float = Field(default_factory=time.time, description="时间戳")
 
     class Config:
-        json_schema_extra = {
-            "example": {
-                "status": "ok",
-                "timestamp": 1700000000.0
-            }
-        }
+        json_schema_extra = {"example": {"status": "ok", "timestamp": 1700000000.0}}

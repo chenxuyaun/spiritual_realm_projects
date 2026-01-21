@@ -12,9 +12,4 @@ REST API接口模块
 from mm_orch.api.app import create_app, get_app
 from mm_orch.api.auth import APIKeyAuth, get_api_key_header
 
-__all__ = [
-    "create_app",
-    "get_app",
-    "APIKeyAuth",
-    "get_api_key_header"
-]
+__all__ = ["create_app", "get_app", "APIKeyAuth", "get_api_key_header"]
