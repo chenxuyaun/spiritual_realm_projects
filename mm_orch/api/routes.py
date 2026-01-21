@@ -512,7 +512,7 @@ async def generate_lesson(
         "Lesson pack request received",
         request_id=request_id,
         topic=lesson_request.topic,
-        level=lesson_request.level
+        difficulty_level=lesson_request.level
     )
     
     try:
