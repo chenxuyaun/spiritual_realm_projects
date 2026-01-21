@@ -54,3 +54,8 @@ class ConsciousnessError(MuAIError):
 class StorageError(MuAIError):
     """存储错误：数据持久化失败、文件读写错误"""
     pass
+
+
+class OrchestrationError(MuAIError):
+    """编排错误：工作流编排失败、路由失败、协调失败"""
+    pass
