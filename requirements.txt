@@ -1,9 +1,15 @@
 # Core ML Framework
 torch>=2.0.0
-transformers>=4.30.0
+transformers>=4.32.0
 accelerate>=0.20.0
 bitsandbytes>=0.41.0
 sentence-transformers>=2.2.0
+
+# Quantization Support
+auto-gptq>=0.4.0
+
+# Memory Monitoring
+psutil>=5.9.0
 
 # Vector Database
 faiss-cpu>=1.7.4
