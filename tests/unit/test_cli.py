@@ -445,7 +445,7 @@ class TestMainFunction:
         with patch('builtins.print'):
             main(["-v", "测试"])
         
-        mock_cli_class.assert_called_once_with(verbose=True)
+        mock_cli_class.assert_called_once_with(verbose=True, model=None, use_real_models=False)
     
     @patch('mm_orch.main.CLI')
     @patch('mm_orch.main.configure_logger')

@@ -51,6 +51,19 @@
 - 持久化对话历史
 - 滑动窗口策略管理长对话
 
+### 🤖 真实模型集成
+- 支持HuggingFace模型（Qwen-Chat、GPT-2等）
+- 8-bit/4-bit量化支持（bitsandbytes、GPTQ）
+- FlashAttention加速
+- LRU模型缓存策略
+- GPU/CPU自动切换
+
+### 📊 性能基准测试
+- 延迟测试（TTFT、tokens/s）
+- 内存占用测试
+- 吞吐量测试
+- JSON/CSV报告生成
+
 ---
 
 ## 快速开始
@@ -116,6 +129,15 @@ python -m mm_orch.main --workflow search_qa "最新的AI发展趋势"
 # 交互式对话模式
 python -m mm_orch.main --mode chat
 
+# 使用真实模型
+python -m mm_orch.main --real-models --model gpt2 "你好"
+
+# 查看可用模型
+python -m mm_orch.main --model-info
+
+# 运行基准测试
+python -m mm_orch.main --benchmark --model gpt2
+
 # 启动API服务
 python -m mm_orch.main --serve
 ```
@@ -142,6 +164,10 @@ python -m mm_orch.main [OPTIONS] [QUERY]
 | `--config` | 指定配置文件 | `--config custom.yaml` |
 | `--status` | 显示系统状态 | `--status` |
 | `--verbose` | 详细输出 | `--verbose` |
+| `--model` | 指定模型 | `--model gpt2` |
+| `--real-models` | 使用真实模型 | `--real-models` |
+| `--benchmark` | 运行基准测试 | `--benchmark` |
+| `--model-info` | 查看模型信息 | `--model-info` |
 
 #### 工作流类型
 

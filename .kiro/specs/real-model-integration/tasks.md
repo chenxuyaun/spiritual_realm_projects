@@ -86,22 +86,22 @@
 ## 第四阶段：工作流集成 (Workflow Integration)
 
 ### 10. SearchQA工作流适配
-- [ ] 10.1 更新mm_orch/workflows/search_qa.py支持真实模型
-- [ ] 10.2 实现检索资料提示词模板
-- [ ] 10.3 实现答案后处理（引用验证）
-- [ ] 10.4 编写SearchQA集成测试
+- [x] 10.1 更新mm_orch/workflows/search_qa.py支持真实模型
+- [x] 10.2 实现检索资料提示词模板
+- [x] 10.3 实现答案后处理（引用验证）
+- [x] 10.4 编写SearchQA集成测试
 
 ### 11. LessonPack工作流适配
-- [ ] 11.1 更新mm_orch/workflows/lesson_pack.py支持真实模型
-- [ ] 11.2 实现课程生成提示词模板
-- [ ] 11.3 实现Markdown格式验证
-- [ ] 11.4 编写LessonPack集成测试
+- [x] 11.1 更新mm_orch/workflows/lesson_pack.py支持真实模型
+- [x] 11.2 实现课程生成提示词模板
+- [x] 11.3 实现Markdown格式验证
+- [x] 11.4 编写LessonPack集成测试
 
 ### 12. ChatGenerate工作流适配
-- [ ] 12.1 更新mm_orch/workflows/chat_generate.py支持真实模型
-- [ ] 12.2 集成对话管理器
-- [ ] 12.3 实现多轮对话支持
-- [ ] 12.4 编写ChatGenerate集成测试
+- [x] 12.1 更新mm_orch/workflows/chat_generate.py支持真实模型
+- [x] 12.2 集成对话管理器
+- [x] 12.3 实现多轮对话支持
+- [x] 12.4 编写ChatGenerate集成测试
 
 ---
 
@@ -157,32 +157,32 @@
 ## 第七阶段：CLI与API集成 (Integration)
 
 ### 19. CLI更新
-- [ ] 19.1 更新mm_orch/main.py添加模型选择参数
-- [ ] 19.2 添加基准测试命令
-- [ ] 19.3 添加模型信息查看命令
-- [ ] 19.4 编写CLI集成测试
+- [x] 19.1 更新mm_orch/main.py添加模型选择参数
+- [x] 19.2 添加基准测试命令
+- [x] 19.3 添加模型信息查看命令
+- [x] 19.4 编写CLI集成测试
 
 ### 20. API更新
-- [ ] 20.1 更新mm_orch/api/routes.py添加模型管理端点
-- [ ] 20.2 添加基准测试端点
-- [ ] 20.3 添加模型状态查询端点
-- [ ] 20.4 编写API集成测试
+- [x] 20.1 更新mm_orch/api/routes.py添加模型管理端点
+- [x] 20.2 添加基准测试端点
+- [x] 20.3 添加模型状态查询端点
+- [x] 20.4 编写API集成测试
 
 ---
 
 ## 第八阶段：文档与最终验证 (Documentation & Final)
 
 ### 21. 文档更新
-- [ ] 21.1 更新README.md添加真实模型使用说明
-- [ ] 21.2 创建docs/real_model_guide.md使用指南
-- [ ] 21.3 创建docs/benchmark_guide.md基准测试指南
-- [ ] 21.4 更新API文档
+- [x] 21.1 更新README.md添加真实模型使用说明
+- [x] 21.2 创建docs/real_model_guide.md使用指南
+- [x] 21.3 创建docs/benchmark_guide.md基准测试指南
+- [x] 21.4 更新API文档
 
 ### 22. 最终检查点
-- [ ] 22.1 运行完整测试套件
-- [ ] 22.2 验证测试覆盖率≥80%
-- [ ] 22.3 运行GPT-2模型端到端测试
-- [ ] 22.4 生成性能基准报告
+- [x] 22.1 运行完整测试套件
+- [x] 22.2 验证测试覆盖率≥80%
+- [x] 22.3 运行GPT-2模型端到端测试
+- [-] 22.4 生成性能基准报告
 - [ ] 22.5 代码审查和清理
 
 ---

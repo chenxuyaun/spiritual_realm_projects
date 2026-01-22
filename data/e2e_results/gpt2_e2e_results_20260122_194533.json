@@ -1,0 +1,140 @@
+{
+  "timestamp": "2026-01-22T19:45:11.357346",
+  "device": "cpu",
+  "model": "gpt2",
+  "tests": [
+    {
+      "test_name": "basic_generation",
+      "passed": true,
+      "results": [
+        {
+          "prompt": "The capital of France is",
+          "response": " now in the hands, or at least has been for a few decades. Its streets are bustling with people and shops: many more have opened since 2002 than before (though there were fewer as recently) but still ",
+          "tokens_per_second": 33.32636766855174,
+          "output_tokens": 100,
+          "elapsed_time": 3.000627040863037
+        },
+        {
+          "prompt": "Python is a programming language that",
+          "response": " provides the basic functionality of data structures.\nThe library has many features, such as:\nYou can create and edit datasets for your application by using its functions . You don't need to know what",
+          "tokens_per_second": 35.96656877906208,
+          "output_tokens": 100,
+          "elapsed_time": 2.7803597450256348
+        },
+        {
+          "prompt": "Machine learning is",
+          "response": " one of the most important tools for understanding machine intelligence and it has been widely used by companies like Google, Microsoft and IBM to provide a variety. It also serves as an essential too",
+          "tokens_per_second": 36.14756697964404,
+          "output_tokens": 49,
+          "elapsed_time": 1.3555545806884766
+        }
+      ]
+    },
+    {
+      "test_name": "e2e_validation",
+      "passed": false,
+      "summary": {
+        "total": 3,
+        "passed": 1,
+        "failed": 2,
+        "pass_rate": 33.33333333333333,
+        "avg_duration": 3.404860399999999
+      },
+      "results": [
+        {
+          "test_case_id": "e2e_sq_001",
+          "test_case_name": "Basic factual question",
+          "passed": true,
+          "timestamp": "2026-01-22T19:45:21.575083",
+          "duration": 3.0785253999999895,
+          "response": "\nThe Capital of French History. A Collection of Sources and Works by Jean-François Pétain, published in 1874 (see here), which has been translated into English as: \"From Stade des Parisienne to Saint-Denis.\" The book's primary text consists principally of accounts from both places during its existence at this period; but there are many other sources that follow his lead on some subjects besides these alone.(6) There may be a few discrepancies between what I have",
+          "error_message": "",
+          "checks": {
+            "response_time_ok": true,
+            "keywords_found": true,
+            "response_not_empty": true,
+            "response_length_ok": true
+          },
+          "metrics": {
+            "response_time": 3.0785253999999895,
+            "keywords_found_ratio": 1.0
+          }
+        },
+        {
+          "test_case_id": "e2e_sq_002",
+          "test_case_name": "Programming question",
+          "passed": false,
+          "timestamp": "2026-01-22T19:45:24.442399",
+          "duration": 2.865942300000029,
+          "response": "\nThe simplest way to think about it would be as follows: we have a function that will take two arguments and return them in an array. We could use the following code snippet, where you might find yourself using this example above (you can see my original version here): def main(): if __name__ == '__main__': print \"Hello world!\" end class HelloWorld() :defer_args(self): # ... or something like... >>> from sys import run = Run(\"",
+          "error_message": "",
+          "checks": {
+            "response_time_ok": true,
+            "keywords_found": false,
+            "response_not_empty": true,
+            "response_length_ok": true
+          },
+          "metrics": {
+            "response_time": 2.865942300000029,
+            "keywords_found_ratio": 0.0
+          }
+        },
+        {
+          "test_case_id": "e2e_conv_001",
+          "test_case_name": "Simple context test",
+          "passed": false,
+          "timestamp": "2026-01-22T19:45:28.712381",
+          "duration": 4.2701134999999795,
+          "response": " You are very welcome to come and learn in the classroom! :) Your new assignments will be available as soon you arrive at your program(s) of choice; please do not hesitate to send me an email with any questions or comments if we find them useful 🙂\n---\n First thing is that for every module which implements a standard library (which most people have already installed), there's another one where it uses all kinds more libraries than others such Async/Asynchronous calls etc. So what happens when eac",
+          "error_message": "",
+          "checks": {
+            "turn_0_time_ok": true,
+            "turn_1_time_ok": true,
+            "context_maintained": false,
+            "all_responses_not_empty": true
+          },
+          "metrics": {
+            "total_time": 4.2701134999999795,
+            "avg_turn_time": 2.1350512500000605,
+            "context_keywords_found": 0
+          }
+        }
+      ]
+    },
+    {
+      "test_name": "streaming_generation",
+      "passed": true,
+      "tokens_received": 12,
+      "elapsed_time": 0.30474424362182617,
+      "response_preview": "\n[Hannah] - [Jenny]"
+    },
+    {
+      "test_name": "batch_generation",
+      "passed": true,
+      "batch_size": 3,
+      "elapsed_time": 4.42746376991272,
+      "results": [
+        {
+          "prompt": "The weather today is",
+          "response": " is very cold with a little bit of rain, but the temperature was about 100 degrees. The wind speed v",
+          "tokens_per_second": 68.4520311099247
+        },
+        {
+          "prompt": "My favorite food is",
+          "response": " is the ones that have a lot of fat and they are good for you. They taste great, but don't get them ",
+          "tokens_per_second": 68.4520311099247
+        },
+        {
+          "prompt": "The best programming language is",
+          "response": " C++, but it's not quite the same as Java or Python.\nIn fact, I don't know if that makes sense to yo",
+          "tokens_per_second": 67.77428822764823
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "total": 4,
+    "pass_rate": 75.0
+  }
+}

@@ -9,11 +9,15 @@ API路由定义
 - POST /api/rag/upload - 文档上传
 - POST /api/rag/query - RAG问答
 - GET /api/status - 系统状态查询
+- GET /api/models - 模型列表
+- POST /api/models/load - 加载模型
+- POST /api/models/unload - 卸载模型
+- POST /api/benchmark - 运行基准测试
 """
 
 import time
 import uuid
-from typing import Optional
+from typing import Optional, Dict, Any, List
 
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
@@ -681,6 +685,266 @@ async def get_metrics(request: Request, api_key: str = Depends(verify_api_key)):
             content={
                 "success": False,
                 "error": {"code": "METRICS_ERROR", "message": str(e)},
+                "timestamp": time.time(),
+                "request_id": request_id,
+            },
+        )
+
+
+# ============ 模型管理端点 ============
+
+
+@router.get(
+    "/models",
+    summary="模型列表",
+    description="获取可用模型列表和已加载模型状态",
+    responses={
+        401: {"model": ErrorResponse, "description": "未提供API密钥"},
+        403: {"model": ErrorResponse, "description": "无效的API密钥"},
+    },
+)
+async def list_models(request: Request, api_key: str = Depends(verify_api_key)):
+    """
+    获取模型列表
+
+    返回配置的模型列表和当前加载状态
+    """
+    request_id = get_request_id(request)
+
+    try:
+        import yaml
+        from pathlib import Path
+
+        # 读取模型配置
+        config_path = Path("config/models.yaml")
+        available_models = {}
+        
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+                available_models = config.get("models", {})
+
+        # 尝试获取已加载模型
+        loaded_models = []
+        try:
+            from mm_orch.runtime.real_model_manager import RealModelManager
+            # 这里可以添加获取已加载模型的逻辑
+        except ImportError:
+            pass
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "available_models": list(available_models.keys()),
+                "model_configs": {
+                    name: {
+                        "model_type": cfg.get("model_type"),
+                        "quantization": cfg.get("quantization"),
+                        "device": cfg.get("device", "auto"),
+                    }
+                    for name, cfg in available_models.items()
+                },
+                "loaded_models": loaded_models,
+                "timestamp": time.time(),
+                "request_id": request_id,
+            }
+        )
+
+    except Exception as e:
+        logger.error("Failed to list models", request_id=request_id, error=str(e))
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "success": False,
+                "error": {"code": "MODEL_LIST_ERROR", "message": str(e)},
+                "timestamp": time.time(),
+                "request_id": request_id,
+            },
+        )
+
+
+@router.get(
+    "/models/{model_name}",
+    summary="模型详情",
+    description="获取特定模型的详细信息",
+    responses={
+        401: {"model": ErrorResponse, "description": "未提供API密钥"},
+        403: {"model": ErrorResponse, "description": "无效的API密钥"},
+        404: {"model": ErrorResponse, "description": "模型不存在"},
+    },
+)
+async def get_model_info(
+    request: Request, model_name: str, api_key: str = Depends(verify_api_key)
+):
+    """
+    获取模型详细信息
+    """
+    request_id = get_request_id(request)
+
+    try:
+        import yaml
+        from pathlib import Path
+
+        # 读取模型配置
+        config_path = Path("config/models.yaml")
+        
+        if not config_path.exists():
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "success": False,
+                    "error": {"code": "CONFIG_NOT_FOUND", "message": "Model config not found"},
+                    "timestamp": time.time(),
+                    "request_id": request_id,
+                },
+            )
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+            models = config.get("models", {})
+
+        if model_name not in models:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "success": False,
+                    "error": {"code": "MODEL_NOT_FOUND", "message": f"Model '{model_name}' not found"},
+                    "timestamp": time.time(),
+                    "request_id": request_id,
+                },
+            )
+
+        model_config = models[model_name]
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "model_name": model_name,
+                "config": model_config,
+                "timestamp": time.time(),
+                "request_id": request_id,
+            }
+        )
+
+    except Exception as e:
+        logger.error("Failed to get model info", request_id=request_id, error=str(e))
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "success": False,
+                "error": {"code": "MODEL_INFO_ERROR", "message": str(e)},
+                "timestamp": time.time(),
+                "request_id": request_id,
+            },
+        )
+
+
+# ============ 基准测试端点 ============
+
+
+@router.post(
+    "/benchmark",
+    summary="运行基准测试",
+    description="运行模型性能基准测试",
+    responses={
+        401: {"model": ErrorResponse, "description": "未提供API密钥"},
+        403: {"model": ErrorResponse, "description": "无效的API密钥"},
+        422: {"model": ErrorResponse, "description": "请求验证失败"},
+    },
+)
+async def run_benchmark(
+    request: Request,
+    model_name: str = "gpt2",
+    test_types: Optional[List[str]] = None,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    运行基准测试
+
+    Args:
+        model_name: 要测试的模型名称
+        test_types: 测试类型列表 (latency, memory, throughput)
+    """
+    request_id = get_request_id(request)
+
+    logger.info(
+        "Benchmark request received",
+        request_id=request_id,
+        model_name=model_name,
+        test_types=test_types,
+    )
+
+    try:
+        from mm_orch.benchmark.latency import LatencyBenchmark
+        from mm_orch.benchmark.memory import MemoryBenchmark
+        from mm_orch.benchmark.throughput import ThroughputBenchmark
+
+        test_types = test_types or ["latency", "memory", "throughput"]
+        results = {}
+
+        # 运行延迟测试
+        if "latency" in test_types:
+            try:
+                latency_bench = LatencyBenchmark()
+                latency_result = latency_bench.run_benchmark(
+                    model_name=model_name,
+                    test_prompts=["Hello, how are you?"],
+                    num_runs=3
+                )
+                results["latency"] = latency_result.metrics
+            except Exception as e:
+                results["latency"] = {"error": str(e)}
+
+        # 运行内存测试
+        if "memory" in test_types:
+            try:
+                memory_bench = MemoryBenchmark()
+                memory_result = memory_bench.run_benchmark(model_name=model_name)
+                results["memory"] = memory_result.metrics
+            except Exception as e:
+                results["memory"] = {"error": str(e)}
+
+        # 运行吞吐量测试
+        if "throughput" in test_types:
+            try:
+                throughput_bench = ThroughputBenchmark()
+                throughput_result = throughput_bench.run_benchmark(
+                    model_name=model_name,
+                    num_requests=3,
+                    concurrent_levels=[1]
+                )
+                results["throughput"] = throughput_result.metrics
+            except Exception as e:
+                results["throughput"] = {"error": str(e)}
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "model_name": model_name,
+                "results": results,
+                "timestamp": time.time(),
+                "request_id": request_id,
+            }
+        )
+
+    except ImportError as e:
+        logger.error("Benchmark modules not available", request_id=request_id, error=str(e))
+        return JSONResponse(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            content={
+                "success": False,
+                "error": {"code": "BENCHMARK_NOT_AVAILABLE", "message": str(e)},
+                "timestamp": time.time(),
+                "request_id": request_id,
+            },
+        )
+    except Exception as e:
+        logger.error("Benchmark failed", request_id=request_id, error=str(e))
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "success": False,
+                "error": {"code": "BENCHMARK_ERROR", "message": str(e)},
                 "timestamp": time.time(),
                 "request_id": request_id,
             },
