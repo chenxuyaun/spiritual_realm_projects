@@ -1,0 +1,67 @@
+{
+  "conversation": [
+    {
+      "id": "conv_001",
+      "name": "Simple two-turn conversation",
+      "description": "Test basic context retention",
+      "tags": ["basic", "context"],
+      "turns": [
+        {"role": "user", "content": "My name is Alice."},
+        {"role": "user", "content": "What is my name?"}
+      ],
+      "context_keywords": ["Alice"],
+      "max_turn_time": 10.0
+    },
+    {
+      "id": "conv_002",
+      "name": "Technical discussion",
+      "description": "Test technical context retention",
+      "tags": ["technical", "programming"],
+      "turns": [
+        {"role": "user", "content": "I'm learning Python programming."},
+        {"role": "user", "content": "What are some good libraries for data analysis in the language I mentioned?"}
+      ],
+      "context_keywords": ["Python", "pandas", "numpy"],
+      "max_turn_time": 10.0
+    },
+    {
+      "id": "conv_003",
+      "name": "Multi-turn problem solving",
+      "description": "Test multi-turn problem solving",
+      "tags": ["problem-solving", "multi-turn"],
+      "turns": [
+        {"role": "user", "content": "I want to build a web application."},
+        {"role": "user", "content": "What framework should I use?"},
+        {"role": "user", "content": "Can you explain how to set up a basic project with that framework?"}
+      ],
+      "context_keywords": ["web", "framework", "project"],
+      "max_turn_time": 15.0
+    },
+    {
+      "id": "conv_004",
+      "name": "Topic continuation",
+      "description": "Test topic continuation across turns",
+      "tags": ["topic", "continuation"],
+      "turns": [
+        {"role": "user", "content": "Tell me about neural networks."},
+        {"role": "user", "content": "What are the main types?"},
+        {"role": "user", "content": "Which one is best for image recognition?"}
+      ],
+      "context_keywords": ["neural", "CNN", "convolutional", "image"],
+      "max_turn_time": 10.0
+    },
+    {
+      "id": "conv_005",
+      "name": "Reference resolution",
+      "description": "Test pronoun and reference resolution",
+      "tags": ["reference", "pronoun"],
+      "turns": [
+        {"role": "user", "content": "I have a list of numbers: [1, 2, 3, 4, 5]."},
+        {"role": "user", "content": "How do I find the sum of it?"},
+        {"role": "user", "content": "What about the average?"}
+      ],
+      "context_keywords": ["list", "sum", "average"],
+      "max_turn_time": 10.0
+    }
+  ]
+}

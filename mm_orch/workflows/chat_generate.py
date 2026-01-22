@@ -8,6 +8,9 @@ conversations with:
 3. Response generation
 4. History update
 
+Supports both mock model manager and real model integration via
+RealModelManager, InferenceEngine, and ConversationManager.
+
 Requirements:
 - 4.1: Create new session with unique ID
 - 4.2: Retrieve conversation history
@@ -22,7 +25,7 @@ Properties verified:
 - Property 10: 对话历史滑动窗口
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from dataclasses import dataclass, field
 import time
 import uuid
@@ -33,8 +36,26 @@ from mm_orch.storage.chat_storage import ChatStorage, get_chat_storage
 from mm_orch.exceptions import ValidationError, WorkflowError
 from mm_orch.logger import get_logger
 
+if TYPE_CHECKING:
+    from mm_orch.runtime.real_model_manager import RealModelManager
+    from mm_orch.runtime.inference_engine import InferenceEngine
+    from mm_orch.runtime.conversation import ConversationManager
+
 
 logger = get_logger(__name__)
+
+
+# Default system prompts for different languages
+DEFAULT_SYSTEM_PROMPT_EN = (
+    "You are a helpful AI assistant. Respond to the user's messages "
+    "in a helpful, accurate, and friendly manner. Consider the "
+    "conversation history when generating responses."
+)
+
+DEFAULT_SYSTEM_PROMPT_ZH = (
+    "你是一个有帮助的AI助手。请以友好、准确、有帮助的方式回应用户的消息。"
+    "在生成回复时，请考虑对话历史。"
+)
 
 
 @dataclass
@@ -81,6 +102,9 @@ class ChatGenerateWorkflow(BaseWorkflow):
     - Persistent storage of history (Property 9)
     - Sliding window for history management (Property 10)
 
+    Supports real model integration via RealModelManager, InferenceEngine,
+    and ConversationManager.
+
     Attributes:
         workflow_type: WorkflowType.CHAT_GENERATE
         name: "ChatGenerate"
@@ -94,37 +118,54 @@ class ChatGenerateWorkflow(BaseWorkflow):
         self,
         chat_storage: Optional[ChatStorage] = None,
         model_manager: Optional[Any] = None,
+        real_model_manager: Optional["RealModelManager"] = None,
+        inference_engine: Optional["InferenceEngine"] = None,
+        conversation_manager: Optional["ConversationManager"] = None,
         generator_model: str = "gpt2",
+        model_type: str = "gpt2",
         max_history_turns: int = 10,
         max_context_length: int = 2000,
         system_prompt: Optional[str] = None,
+        use_real_models: bool = False,
+        language: str = "en",
     ):
         """
         Initialize the ChatGenerate workflow.
 
         Args:
             chat_storage: Chat storage instance for history management
-            model_manager: Model manager for response generation
+            model_manager: Model manager for response generation (mock)
+            real_model_manager: Real model manager for actual LLM inference
+            inference_engine: Inference engine for real model generation
+            conversation_manager: Conversation manager for prompt building
             generator_model: Model name for response generation
+            model_type: Model type for conversation format ("qwen-chat", "gpt2", etc.)
             max_history_turns: Maximum history turns to include in context
             max_context_length: Maximum context length in characters
             system_prompt: Optional system prompt for the conversation
+            use_real_models: Whether to use real models instead of mock
+            language: Output language ("en" or "zh")
         """
         super().__init__()
         self.chat_storage = chat_storage or get_chat_storage()
         self.model_manager = model_manager
+        self.real_model_manager = real_model_manager
+        self.inference_engine = inference_engine
+        self.conversation_manager = conversation_manager
         self.generator_model = generator_model
+        self.model_type = model_type
         self.max_history_turns = max_history_turns
         self.max_context_length = max_context_length
-        self.system_prompt = system_prompt or self._default_system_prompt()
-
-    def _default_system_prompt(self) -> str:
-        """Return the default system prompt."""
-        return (
-            "You are a helpful AI assistant. Respond to the user's messages "
-            "in a helpful, accurate, and friendly manner. Consider the "
-            "conversation history when generating responses."
-        )
+        self.use_real_models = use_real_models
+        self.language = language
+        
+        # Set default system prompt based on language
+        if system_prompt:
+            self.system_prompt = system_prompt
+        elif language == "zh":
+            self.system_prompt = DEFAULT_SYSTEM_PROMPT_ZH
+        else:
+            self.system_prompt = DEFAULT_SYSTEM_PROMPT_EN
 
     def get_required_parameters(self) -> List[str]:
         """Return required parameters for this workflow."""
@@ -478,6 +519,10 @@ class ChatGenerateWorkflow(BaseWorkflow):
         Returns:
             Generated response text
         """
+        # Use real models if available and enabled
+        if self.use_real_models and self.inference_engine:
+            return self._generate_with_real_model(context, temperature)
+
         if self.model_manager:
             try:
                 response = self.model_manager.infer(
@@ -493,6 +538,116 @@ class ChatGenerateWorkflow(BaseWorkflow):
 
         # Fallback: simple echo response
         return self._simple_response(context)
+
+    def _generate_with_real_model(self, context: str, temperature: float) -> str:
+        """
+        Generate response using real model via InferenceEngine.
+
+        Args:
+            context: Full context including history and current message
+            temperature: Generation temperature
+
+        Returns:
+            Generated response text
+        """
+        try:
+            # If we have a conversation manager, use it to build proper prompt
+            if self.conversation_manager:
+                prompt = self.conversation_manager.build_prompt(
+                    system_prompt=self.system_prompt,
+                    include_generation_prompt=True
+                )
+            else:
+                prompt = context
+
+            # Generate using inference engine
+            from mm_orch.runtime.inference_engine import GenerationConfig
+            
+            config = GenerationConfig(
+                max_new_tokens=512,
+                temperature=temperature,
+                top_p=0.9,
+                repetition_penalty=1.1
+            )
+
+            result = self.inference_engine.generate(prompt, config=config)
+            response = result.text.strip()
+
+            # Clean up the response
+            response = self._clean_response(response, prompt)
+
+            logger.info(
+                f"Generated response with real model: {len(response)} chars, "
+                f"{result.tokens_per_second:.1f} tokens/s"
+            )
+            return response
+
+        except Exception as e:
+            logger.error(f"Real model generation failed: {e}")
+            # Fallback to simple response
+            return self._simple_response(context)
+
+    def _step_build_context_with_conversation_manager(
+        self, ctx: ChatGenerateContext, custom_system_prompt: Optional[str]
+    ) -> ChatGenerateContext:
+        """
+        Build context using ConversationManager for proper model-specific formatting.
+
+        Args:
+            ctx: Workflow context
+            custom_system_prompt: Optional custom system prompt
+
+        Returns:
+            Updated context with context text
+        """
+        start_time = time.time()
+        step = ChatGenerateStep(name="build_context", success=False)
+
+        try:
+            system_prompt = custom_system_prompt or self.system_prompt
+
+            # Create or reset conversation manager
+            if self.conversation_manager is None:
+                from mm_orch.runtime.conversation import ConversationManager
+                self.conversation_manager = ConversationManager(
+                    model_type=self.model_type,
+                    max_history_tokens=self.max_context_length,
+                    system_prompt=system_prompt
+                )
+            else:
+                self.conversation_manager.clear_history()
+                self.conversation_manager.set_system_prompt(system_prompt)
+
+            # Add history to conversation manager
+            for msg in ctx.history:
+                self.conversation_manager.add_turn(msg.role, msg.content)
+
+            # Add current message
+            self.conversation_manager.add_user_input(ctx.message)
+
+            # Build prompt
+            ctx.context_text = self.conversation_manager.build_prompt(
+                system_prompt=system_prompt,
+                include_generation_prompt=True
+            )
+
+            step.success = True
+
+            logger.debug(
+                f"Built context with conversation manager: {len(ctx.context_text)} chars",
+                history_messages=len(ctx.history)
+            )
+
+        except Exception as e:
+            step.error = str(e)
+            logger.error(f"Failed to build context with conversation manager: {e}")
+            # Fallback to simple context building
+            ctx.context_text = f"User: {ctx.message}\nAssistant:"
+            step.success = True
+
+        step.duration = time.time() - start_time
+        ctx.add_step(step)
+        return ctx
 
     def _clean_response(self, response: str, context: str) -> str:
         """

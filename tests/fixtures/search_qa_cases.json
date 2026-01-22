@@ -1,0 +1,54 @@
+{
+  "search_qa": [
+    {
+      "id": "sq_001",
+      "name": "Basic factual question",
+      "description": "Test basic factual question answering",
+      "tags": ["basic", "factual"],
+      "query": "What is the capital of France?",
+      "expected_keywords": ["Paris", "France", "capital"],
+      "expected_sources": 1,
+      "max_response_time": 30.0
+    },
+    {
+      "id": "sq_002",
+      "name": "Technical question",
+      "description": "Test technical question about programming",
+      "tags": ["technical", "programming"],
+      "query": "What is the difference between Python lists and tuples?",
+      "expected_keywords": ["list", "tuple", "mutable", "immutable"],
+      "expected_sources": 1,
+      "max_response_time": 30.0
+    },
+    {
+      "id": "sq_003",
+      "name": "Explanation question",
+      "description": "Test explanation of a concept",
+      "tags": ["explanation", "science"],
+      "query": "Explain how photosynthesis works",
+      "expected_keywords": ["light", "plant", "oxygen", "carbon dioxide"],
+      "expected_sources": 1,
+      "max_response_time": 30.0
+    },
+    {
+      "id": "sq_004",
+      "name": "Comparison question",
+      "description": "Test comparison between concepts",
+      "tags": ["comparison", "technology"],
+      "query": "Compare machine learning and deep learning",
+      "expected_keywords": ["machine learning", "deep learning", "neural", "algorithm"],
+      "expected_sources": 1,
+      "max_response_time": 30.0
+    },
+    {
+      "id": "sq_005",
+      "name": "How-to question",
+      "description": "Test procedural question",
+      "tags": ["how-to", "practical"],
+      "query": "How do I create a REST API in Python?",
+      "expected_keywords": ["API", "Python", "endpoint", "request"],
+      "expected_sources": 1,
+      "max_response_time": 30.0
+    }
+  ]
+}

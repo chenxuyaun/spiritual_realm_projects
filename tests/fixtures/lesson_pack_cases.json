@@ -1,0 +1,59 @@
+{
+  "lesson_pack": [
+    {
+      "id": "lp_001",
+      "name": "Python basics lesson",
+      "description": "Test beginner Python lesson generation",
+      "tags": ["programming", "beginner"],
+      "topic": "Python programming basics",
+      "level": "beginner",
+      "expected_sections": ["introduction", "variables", "data types", "examples"],
+      "min_content_length": 500,
+      "max_response_time": 60.0
+    },
+    {
+      "id": "lp_002",
+      "name": "Machine learning lesson",
+      "description": "Test intermediate ML lesson generation",
+      "tags": ["ml", "intermediate"],
+      "topic": "Introduction to machine learning",
+      "level": "intermediate",
+      "expected_sections": ["overview", "supervised", "unsupervised", "applications"],
+      "min_content_length": 800,
+      "max_response_time": 60.0
+    },
+    {
+      "id": "lp_003",
+      "name": "Data structures lesson",
+      "description": "Test data structures lesson generation",
+      "tags": ["programming", "intermediate"],
+      "topic": "Common data structures",
+      "level": "intermediate",
+      "expected_sections": ["array", "list", "tree", "graph"],
+      "min_content_length": 600,
+      "max_response_time": 60.0
+    },
+    {
+      "id": "lp_004",
+      "name": "Web development lesson",
+      "description": "Test web development lesson generation",
+      "tags": ["web", "beginner"],
+      "topic": "Web development fundamentals",
+      "level": "beginner",
+      "expected_sections": ["html", "css", "javascript"],
+      "min_content_length": 500,
+      "max_response_time": 60.0
+    },
+    {
+      "id": "lp_005",
+      "name": "Database lesson",
+      "description": "Test database lesson generation",
+      "tags": ["database", "intermediate"],
+      "topic": "SQL and database design",
+      "level": "intermediate",
+      "expected_sections": ["sql", "table", "query", "join"],
+      "min_content_length": 600,
+      "max_response_time": 60.0
+    }
+  ]
+}
