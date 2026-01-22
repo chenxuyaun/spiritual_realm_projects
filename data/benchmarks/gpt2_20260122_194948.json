@@ -1,0 +1,123 @@
+{
+  "report_name": "gpt2_20260122_194948",
+  "model_name": "gpt2",
+  "timestamp": "2026-01-22T19:49:48.143168",
+  "system_info": {
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python_version": "3.9.25",
+    "torch_version": "2.8.0+cpu",
+    "cuda": {
+      "available": false,
+      "version": ""
+    },
+    "gpu": {
+      "name": "",
+      "memory_gb": 0.0
+    },
+    "cpu": {
+      "count": 18,
+      "memory_gb": 31.574451446533203
+    },
+    "timestamp": "2026-01-22T19:49:48.154290"
+  },
+  "latency": [
+    {
+      "test_name": "latency_benchmark",
+      "model_name": "gpt2",
+      "timestamp": "2026-01-22T19:49:38.069554",
+      "ttft": {
+        "mean_ms": 1719.1745000000005,
+        "std_ms": 255.7669417356544,
+        "min_ms": 1448.4410000000007,
+        "max_ms": 1956.738399999999,
+        "p50_ms": 1752.344100000002,
+        "p95_ms": 1936.2989699999994,
+        "p99_ms": 1952.650513999999
+      },
+      "tokens_per_second": {
+        "mean": 28.87089488861651,
+        "std": 2.530379071854519,
+        "min": 26.030587397905457,
+        "max": 30.88460424715192
+      },
+      "e2e_latency": {
+        "mean_ms": 1680.633099999999,
+        "std_ms": 154.44593822075703,
+        "min_ms": 1560.4122999999995,
+        "max_ms": 1854.8213999999987
+      },
+      "config": {
+        "warmup_runs": 1,
+        "test_runs": 3,
+        "input_length": 30,
+        "output_length": 0
+      }
+    }
+  ],
+  "memory": [
+    {
+      "test_name": "inference_memory",
+      "model_name": "gpt2",
+      "timestamp": "2026-01-22T19:49:43.041665",
+      "model_load": {
+        "gpu_mb": 0.0,
+        "cpu_mb": 0.0
+      },
+      "inference": {
+        "gpu_peak_mb": 0.0,
+        "gpu_delta_mb": 0.0,
+        "cpu_peak_mb": 0.0,
+        "cpu_delta_mb": 0.078125
+      },
+      "kv_cache_mb": 0.0,
+      "quantization": {
+        "type": null,
+        "memory_reduction_percent": 0.0
+      },
+      "config": {
+        "input_length": 45,
+        "output_length": 0,
+        "gc_before_measure": true
+      }
+    }
+  ],
+  "throughput": [
+    {
+      "test_name": "single_throughput",
+      "model_name": "gpt2",
+      "timestamp": "2026-01-22T19:49:48.141021",
+      "single": {
+        "requests_per_second": 1.000397224391232,
+        "tokens_per_second": 30.011916731736957
+      },
+      "concurrent": {
+        "requests_per_second": 0.0,
+        "tokens_per_second": 0.0,
+        "level": 1
+      },
+      "batch": {
+        "requests_per_second": 0.0,
+        "tokens_per_second": 0.0,
+        "size": 1
+      },
+      "latency": {
+        "mean_ms": 999.599400000001,
+        "p50_ms": 996.715800000004,
+        "p95_ms": 1006.9271099999994,
+        "p99_ms": 1007.8347819999991
+      },
+      "summary": {
+        "duration_seconds": 2.998808799999999,
+        "total_requests": 3,
+        "total_tokens": 90,
+        "failed_requests": 0
+      }
+    }
+  ],
+  "metadata": {
+    "device": "cpu",
+    "quick_mode": true,
+    "warmup_runs": 1,
+    "test_runs": 3
+  }
+}
