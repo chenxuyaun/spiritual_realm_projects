@@ -12,7 +12,7 @@ Validates: Requirements 1.1-1.6
 """
 
 import pytest
-from hypothesis import given, strategies as st, settings, assume
+from hypothesis import given, strategies as st, settings, assume, HealthCheck
 from typing import Dict, List
 
 from mm_orch.consciousness.curriculum import (
@@ -118,7 +118,7 @@ class TestTaskDifficultyEstimationValidity:
     """
     
     @given(task=task_strategy())
-    @settings(max_examples=100)
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
     def test_difficulty_estimation_returns_valid_object(self, task: Task):
         """
         Feature: consciousness-system-deepening, Property 1: Task Difficulty Estimation Validity
