@@ -1,5 +1,9 @@
 """
 PAD Emotion Model for consciousness system.
+
+This module implements the PADEmotionModel which represents emotional states
+using the three-dimensional PAD (Pleasure-Arousal-Dominance) model.
+
 Requirements: 6.1, 6.2, 6.3, 6.4, 6.5
 """
 
@@ -49,6 +53,8 @@ class PADState:
                 abs(self.dominance - other.dominance) < 1e-6)
 
 
+
+# PAD coordinates for discrete emotions
 EMOTION_PAD_MAPPING: Dict[str, PADState] = {
     "happy": PADState(0.7, 0.6, 0.5),
     "excited": PADState(0.6, 0.8, 0.6),
@@ -117,6 +123,7 @@ class PADEmotionConfig:
         )
 
 
+
 class PADEmotionModel:
     """PAD-based emotion model with three dimensions."""
     
@@ -125,6 +132,7 @@ class PADEmotionModel:
             self._config = PADEmotionConfig.from_dict(config)
         else:
             self._config = PADEmotionConfig()
+        
         self._state = PADState(
             self._config.baseline_pleasure,
             self._config.baseline_arousal,
@@ -143,15 +151,23 @@ class PADEmotionModel:
         self._initialized_at: float = time.time()
     
     def get_state(self) -> PADState:
+        """Get current PAD state."""
         return PADState(self._state.pleasure, self._state.arousal, self._state.dominance)
     
     def set_state(self, state: PADState) -> None:
+        """Directly set PAD state."""
         if not isinstance(state, PADState):
             raise TypeError("state must be a PADState instance")
         self._record_state_change("set", state)
         self._state = PADState(state.pleasure, state.arousal, state.dominance)
     
-    def update_state(self, pleasure_delta: float = 0.0, arousal_delta: float = 0.0, dominance_delta: float = 0.0) -> PADState:
+    def update_state(
+        self,
+        pleasure_delta: float = 0.0,
+        arousal_delta: float = 0.0,
+        dominance_delta: float = 0.0,
+    ) -> PADState:
+        """Update PAD state with deltas."""
         new_state = PADState(
             self._state.pleasure + pleasure_delta,
             self._state.arousal + arousal_delta,
@@ -167,12 +183,15 @@ class PADEmotionModel:
         return self.get_state()
     
     def apply_decay(self, decay_rate: Optional[float] = None) -> PADState:
+        """Apply decay toward baseline."""
         rate = decay_rate if decay_rate is not None else self._config.decay_rate
         if not (0.0 <= rate <= 1.0):
             raise ValueError("decay_rate must be between 0.0 and 1.0")
+        
         new_pleasure = self._baseline.pleasure + rate * (self._state.pleasure - self._baseline.pleasure)
         new_arousal = self._baseline.arousal + rate * (self._state.arousal - self._baseline.arousal)
         new_dominance = self._baseline.dominance + rate * (self._state.dominance - self._baseline.dominance)
+        
         new_state = PADState(new_pleasure, new_arousal, new_dominance)
         self._record_state_change("decay", new_state, {"decay_rate": rate})
         self._state = new_state
@@ -181,6 +200,7 @@ class PADEmotionModel:
         return self.get_state()
     
     def apply_time_based_decay(self) -> PADState:
+        """Apply decay based on elapsed time since last decay."""
         elapsed = time.time() - self._last_decay_time
         intervals = int(elapsed / self._config.decay_interval)
         if intervals > 0:
@@ -189,6 +209,7 @@ class PADEmotionModel:
         return self.get_state()
     
     def get_dominant_emotion(self) -> str:
+        """Get the closest discrete emotion label using nearest neighbor."""
         min_distance = float('inf')
         dominant = "neutral"
         for emotion, pad_coords in EMOTION_PAD_MAPPING.items():
@@ -199,16 +220,21 @@ class PADEmotionModel:
         return dominant
     
     def get_emotion_intensity(self) -> float:
+        """Get overall emotional intensity (distance from neutral)."""
         neutral = EMOTION_PAD_MAPPING["neutral"]
         return self._state.distance_to(neutral)
     
     def is_emotional(self) -> bool:
+        """Check if current state is significantly different from neutral."""
         return self.get_emotion_intensity() >= self._config.min_intensity_threshold
     
     def map_to_valence_arousal(self) -> Tuple[float, float]:
+        """Map to legacy valence-arousal format for compatibility."""
         return (self._state.pleasure, self._state.arousal)
+
     
     def get_emotion_probabilities(self) -> Dict[str, float]:
+        """Get probability distribution over discrete emotions."""
         distances: Dict[str, float] = {}
         for emotion, pad_coords in EMOTION_PAD_MAPPING.items():
             distances[emotion] = self._state.distance_to(pad_coords)
@@ -221,7 +247,13 @@ class PADEmotionModel:
             return {e: s / total for e, s in similarities.items()}
         return {e: 1.0 / len(EMOTION_PAD_MAPPING) for e in EMOTION_PAD_MAPPING}
     
-    def _record_state_change(self, change_type: str, new_state: PADState, metadata: Optional[Dict[str, Any]] = None) -> None:
+    def _record_state_change(
+        self,
+        change_type: str,
+        new_state: PADState,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Record state change in history."""
         entry = {
             "timestamp": time.time(),
             "type": change_type,
@@ -234,6 +266,7 @@ class PADEmotionModel:
             self._state_history = self._state_history[-self._max_history_size:]
     
     def get_statistics(self) -> Dict[str, Any]:
+        """Get statistics about the emotion model."""
         return {
             "current_state": self._state.to_dict(),
             "baseline": self._baseline.to_dict(),
@@ -247,21 +280,29 @@ class PADEmotionModel:
         }
     
     def get_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get state change history."""
         if limit is not None:
             return self._state_history[-limit:]
         return self._state_history.copy()
     
     def reset_to_baseline(self) -> PADState:
+        """Reset state to baseline."""
         self._record_state_change("reset", self._baseline)
-        self._state = PADState(self._baseline.pleasure, self._baseline.arousal, self._baseline.dominance)
+        self._state = PADState(
+            self._baseline.pleasure,
+            self._baseline.arousal,
+            self._baseline.dominance,
+        )
         return self.get_state()
     
     def set_baseline(self, baseline: PADState) -> None:
+        """Set a new baseline state."""
         if not isinstance(baseline, PADState):
             raise TypeError("baseline must be a PADState instance")
         self._baseline = PADState(baseline.pleasure, baseline.arousal, baseline.dominance)
     
     def to_dict(self) -> Dict[str, Any]:
+        """Convert the emotion model state to dictionary representation."""
         return {
             "config": self._config.to_dict(),
             "state": self._state.to_dict(),
@@ -275,6 +316,7 @@ class PADEmotionModel:
         }
     
     def load_state(self, state: Dict[str, Any]) -> None:
+        """Load state from a dictionary representation."""
         if "config" in state:
             self._config = PADEmotionConfig.from_dict(state["config"])
         if "state" in state:
@@ -289,13 +331,27 @@ class PADEmotionModel:
             self._total_decays = stats.get("total_decays", 0)
             self._initialized_at = stats.get("initialized_at", time.time())
     
+    def from_dict(self, state: Dict[str, Any]) -> None:
+        """
+        Restore state from a dictionary representation.
+        
+        Alias for load_state() for consistency with other modules.
+        
+        Args:
+            state: Dictionary containing saved state.
+        """
+        self.load_state(state)
+    
     def clear_history(self) -> None:
+        """Clear state change history."""
         self._state_history.clear()
 
 
 def get_emotion_pad_mapping() -> Dict[str, PADState]:
+    """Get the emotion to PAD mapping dictionary."""
     return EMOTION_PAD_MAPPING.copy()
 
 
 def get_pad_for_emotion(emotion: str) -> Optional[PADState]:
+    """Get PAD coordinates for a discrete emotion label."""
     return EMOTION_PAD_MAPPING.get(emotion.lower())

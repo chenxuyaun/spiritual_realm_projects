@@ -694,6 +694,17 @@ class CognitiveAppraisalSystem:
             self._event_relevance.update(state["event_relevance"])
         if "norm_expectations" in state:
             self._norm_expectations.update(state["norm_expectations"])
+    
+    def from_dict(self, state: Dict[str, Any]) -> None:
+        """
+        Restore state from a dictionary representation.
+        
+        Alias for load_state() for consistency with other modules.
+        
+        Args:
+            state: Dictionary containing saved state.
+        """
+        self.load_state(state)
 
 
 def get_appraisal_emotion_mapping() -> Dict[str, Dict[str, Tuple[float, float]]]:

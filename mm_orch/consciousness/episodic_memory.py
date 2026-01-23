@@ -1382,6 +1382,39 @@ class EpisodicMemory:
         memory._initialized_at = data.get("initialized_at", time.time())
         
         return memory
+    
+    def load_state(self, data: Dict[str, Any]) -> None:
+        """
+        Load state from a dictionary (instance method).
+        
+        Args:
+            data: Dictionary containing saved state.
+        """
+        # Restore config
+        if "config" in data:
+            config_data = data["config"]
+            if isinstance(config_data, dict):
+                self._config = EpisodicMemoryConfig.from_dict(config_data)
+        
+        # Restore episodes
+        if "episodes" in data:
+            self._episodes.clear()
+            episodes_data = data["episodes"]
+            for ep_id, ep_data in episodes_data.items():
+                ep = Episode.from_dict(ep_data)
+                self._episodes[ep_id] = ep
+        
+        # Restore statistics
+        if "total_created" in data:
+            self._total_created = data["total_created"]
+        if "total_accessed" in data:
+            self._total_accessed = data["total_accessed"]
+        if "total_pruned" in data:
+            self._total_pruned = data["total_pruned"]
+        if "episodes_since_consolidation" in data:
+            self._episodes_since_consolidation = data["episodes_since_consolidation"]
+        if "initialized_at" in data:
+            self._initialized_at = data["initialized_at"]
 
 
 def create_episode(

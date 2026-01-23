@@ -975,6 +975,17 @@ class SymbolGroundingModule:
             self._total_ambiguity_resolutions = stats.get("total_ambiguity_resolutions", 0)
             self._initialized_at = stats.get("initialized_at", time.time())
 
+    def from_dict(self, state: Dict[str, Any]) -> None:
+        """
+        Restore state from a dictionary representation.
+        
+        Alias for load_state() for consistency with other modules.
+        
+        Args:
+            state: Dictionary containing saved state.
+        """
+        self.load_state(state)
+
     def clear(self) -> None:
         """
         Clear all groundings and reset statistics.

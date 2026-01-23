@@ -1785,3 +1785,371 @@ class TestAdditionalMethods:
         assert "reasoning" in summary["by_task_type"]
         assert summary["by_task_type"]["reasoning"]["count"] == 3
         assert summary["by_task_type"]["reasoning"]["success_rate"] == 2/3
+
+
+
+# =============================================================================
+# Unit Tests for Continuous Learning Integration
+# =============================================================================
+
+class TestContinuousLearningIntegration:
+    """Unit tests for continuous learning functionality."""
+    
+    def test_compose_learning_batch_with_empty_replay_buffer(
+        self, default_system: CurriculumLearningSystem
+    ):
+        """Test batch composition with empty replay buffer."""
+        new_experiences = [{"id": i} for i in range(5)]
+        
+        batch = default_system.compose_learning_batch(
+            new_experiences=new_experiences,
+            replay_buffer=None,
+            replay_ratio=0.3
+        )
+        
+        # Should return only new experiences when buffer is empty
+        assert len(batch) == 5
+        assert batch == new_experiences
+    
+    def test_compose_learning_batch_with_replay(
+        self, default_system: CurriculumLearningSystem
+    ):
+        """Test batch composition with replay buffer."""
+        from mm_orch.consciousness.experience_replay import (
+            ExperienceReplayBuffer,
+            create_experience
+        )
+        
+        # Create new experiences
+        new_experiences = [{"id": f"new_{i}", "type": "new"} for i in range(10)]
+        
+        # Create replay buffer with experiences
+        replay_buffer = ExperienceReplayBuffer(max_size=100)
+        for i in range(20):
+            exp = create_experience(
+                task_type="test_task",
+                context={"test": i},
+                action=f"action_{i}",
+                outcome={"result": "success"},
+                reward=0.5,
+                priority=0.5
+            )
+            replay_buffer.store(exp)
+        
+        # Compose batch with 30% replay
+        batch = default_system.compose_learning_batch(
+            new_experiences=new_experiences,
+            replay_buffer=replay_buffer,
+            replay_ratio=0.3,
+            replay_strategy="uniform"
+        )
+        
+        # Should have both new and replayed experiences
+        assert len(batch) > len(new_experiences)
+        
+        # Count new experiences in batch
+        new_count = sum(1 for exp in batch if isinstance(exp, dict) and exp.get("type") == "new")
+        assert new_count == 10  # All new experiences should be included
+    
+    def test_compose_learning_batch_invalid_replay_ratio(
+        self, default_system: CurriculumLearningSystem
+    ):
+        """Test batch composition with invalid replay ratio."""
+        new_experiences = [{"id": i} for i in range(5)]
+        
+        with pytest.raises(ValueError, match="replay_ratio must be between"):
+            default_system.compose_learning_batch(
+                new_experiences=new_experiences,
+                replay_buffer=None,
+                replay_ratio=1.5  # Invalid
+            )
+    
+    def test_compose_learning_batch_zero_replay_ratio(
+        self, default_system: CurriculumLearningSystem
+    ):
+        """Test batch composition with zero replay ratio."""
+        from mm_orch.consciousness.experience_replay import (
+            ExperienceReplayBuffer,
+            create_experience
+        )
+        
+        new_experiences = [{"id": i} for i in range(5)]
+        
+        # Create replay buffer
+        replay_buffer = ExperienceReplayBuffer(max_size=100)
+        for i in range(10):
+            exp = create_experience(
+                task_type="test_task",
+                context={"test": i},
+                action=f"action_{i}",
+                outcome={"result": "success"},
+                reward=0.5
+            )
+            replay_buffer.store(exp)
+        
+        # Compose batch with 0% replay
+        batch = default_system.compose_learning_batch(
+            new_experiences=new_experiences,
+            replay_buffer=replay_buffer,
+            replay_ratio=0.0
+        )
+        
+        # Should return only new experiences
+        assert len(batch) == 5
+    
+    def test_detect_performance_degradation_insufficient_history(
+        self, default_system: CurriculumLearningSystem
+    ):
+        """Test degradation detection with insufficient history."""
+        # Add only a few tasks
+        for i in range(10):
+            default_system.update_capabilities("reasoning", success=True, score=0.8)
+        
+        result = default_system.detect_performance_degradation(
+            task_type="reasoning",
+            window_size=20
+        )
+        
+        # Should not detect degradation with insufficient history
+        assert result["degraded"] is False
+        assert "Insufficient history" in result["recommendation"]
+    
+    def test_detect_performance_degradation_no_degradation(
+        self, default_system: CurriculumLearningSystem
+    ):
+        """Test degradation detection when performance is stable."""
+        # Add baseline tasks with good performance
+        for i in range(50):
+            default_system.update_capabilities("reasoning", success=True, score=0.8)
+        
+        # Add recent tasks with similar performance
+        for i in range(20):
+            default_system.update_capabilities("reasoning", success=True, score=0.8)
+        
+        result = default_system.detect_performance_degradation(
+            task_type="reasoning",
+            window_size=20,
+            degradation_threshold=0.15
+        )
+        
+        # Should not detect degradation
+        assert result["degraded"] is False
+        assert result["success_rate_drop"] < 0.15
+    
+    def test_detect_performance_degradation_with_degradation(
+        self, default_system: CurriculumLearningSystem
+    ):
+        """Test degradation detection when performance drops."""
+        # Add baseline tasks with good performance (80% success)
+        for i in range(50):
+            success = i % 5 != 0  # 80% success
+            score = 0.8 if success else 0.3
+            default_system.update_capabilities("reasoning", success=success, score=score)
+        
+        # Add recent tasks with poor performance (40% success)
+        for i in range(20):
+            success = i % 5 < 2  # 40% success
+            score = 0.8 if success else 0.3
+            default_system.update_capabilities("reasoning", success=success, score=score)
+        
+        result = default_system.detect_performance_degradation(
+            task_type="reasoning",
+            window_size=20,
+            degradation_threshold=0.15
+        )
+        
+        # Should detect degradation
+        assert result["degraded"] is True
+        assert result["success_rate_drop"] >= 0.15
+        assert "remedial" in result["recommendation"].lower()
+    
+    def test_trigger_remedial_replay_empty_buffer(
+        self, default_system: CurriculumLearningSystem
+    ):
+        """Test remedial replay with empty buffer."""
+        from mm_orch.consciousness.experience_replay import ExperienceReplayBuffer
+        
+        replay_buffer = ExperienceReplayBuffer(max_size=100)
+        
+        remedial_batch = default_system.trigger_remedial_replay(
+            task_type="reasoning",
+            replay_buffer=replay_buffer,
+            batch_size=10
+        )
+        
+        # Should return empty list
+        assert len(remedial_batch) == 0
+    
+    def test_trigger_remedial_replay_with_experiences(
+        self, default_system: CurriculumLearningSystem
+    ):
+        """Test remedial replay with experiences in buffer."""
+        from mm_orch.consciousness.experience_replay import (
+            ExperienceReplayBuffer,
+            create_experience
+        )
+        
+        replay_buffer = ExperienceReplayBuffer(max_size=100)
+        
+        # Add experiences with varying priorities
+        for i in range(20):
+            exp = create_experience(
+                task_type="reasoning",
+                context={"test": i},
+                action=f"action_{i}",
+                outcome={"result": "success"},
+                reward=0.5,
+                priority=0.3 + (i / 20) * 0.7  # Priorities from 0.3 to 1.0
+            )
+            replay_buffer.store(exp)
+        
+        remedial_batch = default_system.trigger_remedial_replay(
+            task_type="reasoning",
+            replay_buffer=replay_buffer,
+            batch_size=10
+        )
+        
+        # Should return requested number of experiences
+        assert len(remedial_batch) == 10
+        
+        # Should be sorted by priority (highest first)
+        priorities = [exp.priority for exp in remedial_batch]
+        assert priorities == sorted(priorities, reverse=True)
+    
+    def test_trigger_remedial_replay_wrong_task_type(
+        self, default_system: CurriculumLearningSystem
+    ):
+        """Test remedial replay for task type not in buffer."""
+        from mm_orch.consciousness.experience_replay import (
+            ExperienceReplayBuffer,
+            create_experience
+        )
+        
+        replay_buffer = ExperienceReplayBuffer(max_size=100)
+        
+        # Add experiences of different task type
+        for i in range(10):
+            exp = create_experience(
+                task_type="language",
+                context={"test": i},
+                action=f"action_{i}",
+                outcome={"result": "success"},
+                reward=0.5
+            )
+            replay_buffer.store(exp)
+        
+        # Try to get remedial batch for different task type
+        remedial_batch = default_system.trigger_remedial_replay(
+            task_type="reasoning",
+            replay_buffer=replay_buffer,
+            batch_size=10
+        )
+        
+        # Should return empty list
+        assert len(remedial_batch) == 0
+    
+    def test_monitor_continuous_learning_not_time_to_check(
+        self, default_system: CurriculumLearningSystem
+    ):
+        """Test monitoring when it's not time to check yet."""
+        from mm_orch.consciousness.experience_replay import ExperienceReplayBuffer
+        
+        replay_buffer = ExperienceReplayBuffer(max_size=100)
+        
+        # Add some tasks (not a multiple of check_interval)
+        for i in range(25):
+            default_system.update_capabilities("reasoning", success=True, score=0.8)
+        
+        result = default_system.monitor_continuous_learning(
+            replay_buffer=replay_buffer,
+            check_interval=50
+        )
+        
+        # Should not check yet
+        assert result["total_tasks_checked"] == 0
+        assert len(result["degraded_tasks"]) == 0
+    
+    def test_monitor_continuous_learning_detects_degradation(
+        self, default_system: CurriculumLearningSystem
+    ):
+        """Test monitoring detects degradation at check interval."""
+        from mm_orch.consciousness.experience_replay import (
+            ExperienceReplayBuffer,
+            create_experience
+        )
+        
+        replay_buffer = ExperienceReplayBuffer(max_size=100)
+        
+        # Add experiences to buffer
+        for i in range(20):
+            exp = create_experience(
+                task_type="reasoning",
+                context={"test": i},
+                action=f"action_{i}",
+                outcome={"result": "success"},
+                reward=0.5,
+                priority=0.7
+            )
+            replay_buffer.store(exp)
+        
+        # Add baseline tasks with good performance
+        for i in range(30):
+            success = i % 5 != 0  # 80% success
+            score = 0.8 if success else 0.3
+            default_system.update_capabilities("reasoning", success=success, score=score)
+        
+        # Add recent tasks with poor performance
+        for i in range(20):
+            success = i % 5 < 2  # 40% success
+            score = 0.8 if success else 0.3
+            default_system.update_capabilities("reasoning", success=success, score=score)
+        
+        # Total is now 50, which is a multiple of check_interval
+        result = default_system.monitor_continuous_learning(
+            replay_buffer=replay_buffer,
+            check_interval=50
+        )
+        
+        # Should detect degradation
+        assert result["total_tasks_checked"] > 0
+        assert "reasoning" in result["degraded_tasks"]
+        assert "reasoning" in result["degradation_details"]
+        assert "reasoning" in result["remedial_batches"]
+        assert len(result["remedial_batches"]["reasoning"]) > 0
+    
+    def test_monitor_continuous_learning_multiple_task_types(
+        self, default_system: CurriculumLearningSystem
+    ):
+        """Test monitoring with multiple task types."""
+        from mm_orch.consciousness.experience_replay import ExperienceReplayBuffer
+        
+        replay_buffer = ExperienceReplayBuffer(max_size=100)
+        
+        # Add tasks for multiple types
+        # reasoning: degraded
+        for i in range(30):
+            default_system.update_capabilities("reasoning", success=True, score=0.8)
+        for i in range(20):
+            default_system.update_capabilities("reasoning", success=False, score=0.3)
+        
+        # language: stable
+        for i in range(30):
+            default_system.update_capabilities("language", success=True, score=0.8)
+        for i in range(20):
+            default_system.update_capabilities("language", success=True, score=0.8)
+        
+        # Total is 100, check at 100
+        result = default_system.monitor_continuous_learning(
+            replay_buffer=replay_buffer,
+            check_interval=100
+        )
+        
+        # Should check both task types
+        assert result["total_tasks_checked"] >= 2
+        
+        # reasoning should be degraded, language should not
+        if "reasoning" in result["degraded_tasks"]:
+            assert "reasoning" in result["degradation_details"]
+        
+        # language should not be in degraded tasks
+        assert "language" not in result["degraded_tasks"]

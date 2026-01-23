@@ -12,6 +12,7 @@ Requirements: 1.1, 1.2, 1.4, 1.5
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
+import random
 import time
 
 if TYPE_CHECKING:
@@ -416,8 +417,14 @@ class CurriculumLearningSystem:
         
         Validates: Requirements 1.1
         """
-        # Start with task's explicit required capabilities
-        required_caps = task.required_capabilities.copy()
+        # Handle both curriculum.Task and schemas.Task
+        if hasattr(task, 'required_capabilities'):
+            required_caps = task.required_capabilities.copy()
+            complexity = task.complexity
+        else:
+            # For schemas.Task, infer from task type
+            required_caps = {}
+            complexity = 0.5  # Default medium complexity
         
         # If no explicit capabilities, infer from task type
         if not required_caps:
@@ -427,7 +434,7 @@ class CurriculumLearningSystem:
             )
             # Scale weights by task complexity
             required_caps = {
-                dim: weight * task.complexity
+                dim: weight * complexity
                 for dim, weight in weights.items()
             }
         
@@ -437,7 +444,7 @@ class CurriculumLearningSystem:
         avg_requirement = (
             sum(required_caps.values()) / num_capabilities
             if num_capabilities > 0
-            else task.complexity
+            else complexity
         )
         
         # Cognitive load increases with more capabilities and higher requirements
@@ -448,13 +455,13 @@ class CurriculumLearningSystem:
         
         # Overall difficulty is weighted combination
         overall_difficulty = min(1.0, max(0.0, (
-            0.4 * task.complexity +
+            0.4 * complexity +
             0.4 * avg_requirement +
             0.2 * cognitive_load
         )))
         
         return TaskDifficulty(
-            complexity=task.complexity,
+            complexity=complexity,
             required_capabilities=required_caps,
             cognitive_load=cognitive_load,
             overall_difficulty=overall_difficulty,
@@ -1155,4 +1162,304 @@ class CurriculumLearningSystem:
             "dimensions_needing_remediation": dimensions_needing_remediation,
             "reduced_thresholds": reduced_thresholds,
             "remedial_tasks": all_remedial_tasks,
+        }
+    
+    def compose_learning_batch(
+        self,
+        new_experiences: List[Any],
+        replay_buffer: Optional[Any] = None,
+        replay_ratio: float = 0.3,
+        replay_strategy: str = "prioritized"
+    ) -> List[Any]:
+        """
+        Compose a learning batch mixing new and replayed experiences.
+        
+        For continuous learning without catastrophic forgetting, this method
+        creates batches that contain both new experiences and replayed past
+        experiences. The replay ratio controls the proportion of replayed
+        experiences in the batch.
+        
+        Args:
+            new_experiences: List of new experiences to learn from.
+            replay_buffer: Optional ExperienceReplayBuffer to sample from.
+                If None or empty, returns only new experiences.
+            replay_ratio: Proportion of batch that should be replayed experiences
+                (0.0 to 1.0). Default is 0.3 (30% replay).
+            replay_strategy: Strategy for sampling replayed experiences
+                ("uniform", "prioritized", or "stratified").
+        
+        Returns:
+            Combined list of new and replayed experiences.
+        
+        Validates: Requirements 9.2
+        """
+        # Validate replay_ratio
+        if not (0.0 <= replay_ratio <= 1.0):
+            raise ValueError(f"replay_ratio must be between 0.0 and 1.0, got {replay_ratio}")
+        
+        # If no replay buffer or it's empty, return only new experiences
+        if replay_buffer is None or len(replay_buffer) == 0:
+            return new_experiences.copy()
+        
+        # If no new experiences, return empty (nothing to learn)
+        if not new_experiences:
+            return []
+        
+        # Calculate batch composition
+        total_new = len(new_experiences)
+        
+        # Calculate number of replayed experiences to include
+        # replay_ratio is the proportion of the TOTAL batch that should be replay
+        # So if we have N new experiences and want R% replay:
+        # total_batch = new + replay
+        # replay / total_batch = R
+        # replay = R * total_batch = R * (new + replay)
+        # replay = R * new + R * replay
+        # replay * (1 - R) = R * new
+        # replay = (R * new) / (1 - R)
+        
+        if replay_ratio >= 1.0:
+            # Edge case: 100% replay means no new experiences (shouldn't happen)
+            num_replay = total_new
+        elif replay_ratio == 0.0:
+            # No replay requested
+            num_replay = 0
+        else:
+            num_replay = max(1, int((replay_ratio * total_new) / (1.0 - replay_ratio)))
+        
+        # Ensure we don't request more than available in buffer
+        num_replay = min(num_replay, len(replay_buffer))
+        
+        # Sample replayed experiences
+        if num_replay > 0:
+            replayed_experiences = replay_buffer.sample(
+                batch_size=num_replay,
+                strategy=replay_strategy
+            )
+        else:
+            replayed_experiences = []
+        
+        # Combine new and replayed experiences
+        # Shuffle to mix them together
+        combined = new_experiences.copy() + replayed_experiences
+        random.shuffle(combined)
+        
+        return combined
+    
+    def detect_performance_degradation(
+        self,
+        task_type: str,
+        window_size: int = 20,
+        degradation_threshold: float = 0.15
+    ) -> Dict[str, Any]:
+        """
+        Detect performance degradation on a previously mastered task type.
+        
+        Compares recent performance on a task type to historical baseline
+        performance to detect if the agent has "forgotten" how to perform
+        the task well (catastrophic forgetting).
+        
+        Args:
+            task_type: The task type to check for degradation.
+            window_size: Number of recent tasks to compare (default: 20).
+            degradation_threshold: Minimum success rate drop to trigger
+                degradation detection (default: 0.15 = 15% drop).
+        
+        Returns:
+            Dictionary containing:
+            - degraded: Boolean indicating if degradation detected
+            - baseline_success_rate: Historical success rate
+            - recent_success_rate: Recent success rate
+            - success_rate_drop: Absolute drop in success rate
+            - baseline_avg_score: Historical average score
+            - recent_avg_score: Recent average score
+            - score_drop: Absolute drop in average score
+            - recommendation: Suggested action if degraded
+        
+        Validates: Requirements 9.4
+        """
+        # Get task history for this task type
+        task_records = [
+            r for r in self._task_history
+            if r["task_type"] == task_type
+        ]
+        
+        if len(task_records) < window_size * 2:
+            # Not enough history to detect degradation
+            return {
+                "degraded": False,
+                "baseline_success_rate": 0.0,
+                "recent_success_rate": 0.0,
+                "success_rate_drop": 0.0,
+                "baseline_avg_score": 0.0,
+                "recent_avg_score": 0.0,
+                "score_drop": 0.0,
+                "recommendation": "Insufficient history for degradation detection",
+            }
+        
+        # Split into baseline (older) and recent windows
+        # Baseline: everything except the most recent window
+        # Recent: the most recent window_size tasks
+        recent_records = task_records[-window_size:]
+        baseline_records = task_records[:-window_size]
+        
+        # Calculate baseline performance
+        baseline_successes = sum(1 for r in baseline_records if r["success"])
+        baseline_success_rate = baseline_successes / len(baseline_records)
+        baseline_total_score = sum(r["score"] for r in baseline_records)
+        baseline_avg_score = baseline_total_score / len(baseline_records)
+        
+        # Calculate recent performance
+        recent_successes = sum(1 for r in recent_records if r["success"])
+        recent_success_rate = recent_successes / len(recent_records)
+        recent_total_score = sum(r["score"] for r in recent_records)
+        recent_avg_score = recent_total_score / len(recent_records)
+        
+        # Calculate drops
+        success_rate_drop = baseline_success_rate - recent_success_rate
+        score_drop = baseline_avg_score - recent_avg_score
+        
+        # Detect degradation
+        # Degradation is detected if:
+        # 1. Success rate has dropped by more than threshold
+        # OR
+        # 2. Average score has dropped significantly (more lenient check)
+        degraded = (
+            success_rate_drop >= degradation_threshold or
+            (success_rate_drop >= degradation_threshold * 0.7 and score_drop > 0.03)
+        )
+        
+        recommendation = ""
+        if degraded:
+            recommendation = (
+                f"Performance degradation detected for {task_type}. "
+                f"Trigger remedial replay with prioritized sampling of "
+                f"{task_type} experiences."
+            )
+        else:
+            recommendation = "No significant performance degradation detected."
+        
+        return {
+            "degraded": degraded,
+            "baseline_success_rate": baseline_success_rate,
+            "recent_success_rate": recent_success_rate,
+            "success_rate_drop": success_rate_drop,
+            "baseline_avg_score": baseline_avg_score,
+            "recent_avg_score": recent_avg_score,
+            "score_drop": score_drop,
+            "recommendation": recommendation,
+        }
+    
+    def trigger_remedial_replay(
+        self,
+        task_type: str,
+        replay_buffer: Any,
+        batch_size: int = 10
+    ) -> List[Any]:
+        """
+        Trigger remedial replay for a task type showing degradation.
+        
+        When performance degradation is detected, this method samples
+        experiences of the degraded task type from the replay buffer
+        for remedial learning.
+        
+        Args:
+            task_type: The task type showing degradation.
+            replay_buffer: ExperienceReplayBuffer to sample from.
+            batch_size: Number of experiences to sample for remediation.
+        
+        Returns:
+            List of experiences for remedial learning.
+        
+        Validates: Requirements 9.4
+        """
+        if replay_buffer is None or len(replay_buffer) == 0:
+            return []
+        
+        # Get experiences of the specified task type
+        task_experiences = replay_buffer.get_experiences_by_task_type(task_type)
+        
+        if not task_experiences:
+            # No experiences of this type in buffer
+            return []
+        
+        # Sample from task-specific experiences
+        # Prioritize high-value experiences (errors, edge cases)
+        actual_batch_size = min(batch_size, len(task_experiences))
+        
+        # Sort by priority and sample top experiences
+        sorted_experiences = sorted(
+            task_experiences,
+            key=lambda e: e.priority,
+            reverse=True
+        )
+        
+        return sorted_experiences[:actual_batch_size]
+    
+    def monitor_continuous_learning(
+        self,
+        replay_buffer: Any,
+        check_interval: int = 50
+    ) -> Dict[str, Any]:
+        """
+        Monitor all task types for performance degradation.
+        
+        Periodically checks all task types that have sufficient history
+        for signs of catastrophic forgetting and recommends remedial
+        replay when needed.
+        
+        Args:
+            replay_buffer: ExperienceReplayBuffer for remedial replay.
+            check_interval: Check degradation every N tasks (default: 50).
+        
+        Returns:
+            Dictionary containing:
+            - total_tasks_checked: Number of task types checked
+            - degraded_tasks: List of task types showing degradation
+            - degradation_details: Detailed degradation info per task type
+            - remedial_batches: Recommended remedial replay batches
+        
+        Validates: Requirements 9.4
+        """
+        # Check if it's time to monitor (based on total task count)
+        total_tasks = len(self._task_history)
+        if total_tasks % check_interval != 0:
+            # Not time to check yet
+            return {
+                "total_tasks_checked": 0,
+                "degraded_tasks": [],
+                "degradation_details": {},
+                "remedial_batches": {},
+            }
+        
+        # Get all unique task types from history
+        task_types = set(r["task_type"] for r in self._task_history)
+        
+        degraded_tasks: List[str] = []
+        degradation_details: Dict[str, Dict[str, Any]] = {}
+        remedial_batches: Dict[str, List[Any]] = {}
+        
+        # Check each task type for degradation
+        for task_type in task_types:
+            degradation_info = self.detect_performance_degradation(task_type)
+            
+            if degradation_info["degraded"]:
+                degraded_tasks.append(task_type)
+                degradation_details[task_type] = degradation_info
+                
+                # Trigger remedial replay
+                if replay_buffer is not None:
+                    remedial_batch = self.trigger_remedial_replay(
+                        task_type,
+                        replay_buffer,
+                        batch_size=10
+                    )
+                    if remedial_batch:
+                        remedial_batches[task_type] = remedial_batch
+        
+        return {
+            "total_tasks_checked": len(task_types),
+            "degraded_tasks": degraded_tasks,
+            "degradation_details": degradation_details,
+            "remedial_batches": remedial_batches,
         }
