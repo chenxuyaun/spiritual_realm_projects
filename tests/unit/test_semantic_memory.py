@@ -830,3 +830,678 @@ class TestConflictResolutionStrategy:
         """Test creating strategy from string."""
         strategy = ConflictResolutionStrategy("newest_wins")
         assert strategy == ConflictResolutionStrategy.NEWEST_WINS
+
+
+class TestKnowledgeGraphOperationsThroughSemanticMemory:
+    """
+    Tests for knowledge graph CRUD operations through SemanticMemory.
+    
+    Requirements: 4.1-4.6
+    """
+
+    def test_create_node_via_integration(self):
+        """Test creating nodes through knowledge integration."""
+        memory = SemanticMemory()
+        
+        result = memory.integrate_knowledge({
+            "concepts": [
+                {"name": "Dog", "type": "animal", "properties": {"legs": 4, "sound": "bark"}}
+            ]
+        })
+        
+        assert result.success
+        assert len(result.new_concepts) == 1
+        
+        # Verify node exists in knowledge graph
+        node = memory.knowledge_graph.get_node_by_name("Dog")
+        assert node is not None
+        assert node.name == "Dog"
+        assert node.node_type == "animal"
+        assert node.properties["legs"] == 4
+        assert node.properties["sound"] == "bark"
+
+    def test_read_node_via_query(self):
+        """Test reading nodes through query interface."""
+        memory = SemanticMemory()
+        
+        memory.integrate_knowledge({
+            "concepts": [
+                {"name": "Cat", "type": "animal"},
+                {"name": "Car", "type": "vehicle"},
+            ]
+        })
+        
+        # Query by name
+        results = memory.query("Cat")
+        assert len(results) >= 1
+        assert any(n.name == "Cat" for n in results)
+        
+        # Query should not return unrelated concepts first
+        results = memory.query("Cat")
+        assert results[0].name == "Cat"
+
+    def test_update_node_via_integration(self):
+        """Test updating nodes through knowledge integration."""
+        memory = SemanticMemory()
+        
+        # Create initial node
+        memory.integrate_knowledge({
+            "concepts": [{"name": "Bird", "type": "animal", "properties": {"can_fly": True}}]
+        })
+        
+        # Update with new properties
+        result = memory.integrate_knowledge({
+            "attributes": {"Bird": {"color": "blue", "size": "small"}}
+        })
+        
+        assert result.success
+        
+        # Verify updates
+        definition = memory.get_concept_definition("Bird")
+        assert definition["properties"]["can_fly"] is True
+        assert definition["properties"]["color"] == "blue"
+        assert definition["properties"]["size"] == "small"
+
+    def test_delete_node_via_knowledge_graph(self):
+        """Test deleting nodes through knowledge graph."""
+        memory = SemanticMemory()
+        
+        memory.integrate_knowledge({
+            "concepts": [{"name": "Temporary", "type": "test"}]
+        })
+        
+        assert "Temporary" in memory
+        
+        # Get node ID and delete
+        node = memory.knowledge_graph.get_node_by_name("Temporary")
+        memory.knowledge_graph.remove_node(node.node_id)
+        
+        assert "Temporary" not in memory
+
+    def test_create_relationship_via_integration(self):
+        """Test creating relationships through knowledge integration."""
+        memory = SemanticMemory()
+        
+        result = memory.integrate_knowledge({
+            "relationships": [
+                {"source": "Dog", "target": "Animal", "type": "is_a", "weight": 0.9}
+            ]
+        })
+        
+        assert result.success
+        assert len(result.new_relationships) == 1
+        
+        # Verify relationship exists
+        dog_node = memory.knowledge_graph.get_node_by_name("Dog")
+        relationships = memory.knowledge_graph.get_relationships(dog_node.node_id, direction="outgoing")
+        
+        assert len(relationships) >= 1
+        assert any(r.relationship_type == "is_a" for r in relationships)
+
+    def test_read_relationship_via_query(self):
+        """Test reading relationships through query interface."""
+        memory = SemanticMemory()
+        
+        memory.integrate_knowledge({
+            "relationships": [
+                {"source": "Python", "target": "Language", "type": "is_a"},
+                {"source": "Python", "target": "Scripting", "type": "supports"},
+            ]
+        })
+        
+        python_node = memory.knowledge_graph.get_node_by_name("Python")
+        
+        # Query all relationships
+        all_rels = memory.query_relationships(python_node.node_id)
+        assert len(all_rels) == 2
+        
+        # Query by type
+        is_a_rels = memory.query_relationships(python_node.node_id, relationship_type="is_a")
+        assert len(is_a_rels) == 1
+        assert is_a_rels[0].relationship_type == "is_a"
+
+    def test_update_relationship_strength(self):
+        """Test that repeated relationship integration strengthens the relationship."""
+        memory = SemanticMemory()
+        
+        # Create initial relationship
+        memory.integrate_knowledge({
+            "relationships": [{"source": "A", "target": "B", "type": "related_to", "weight": 0.5}]
+        })
+        
+        a_node = memory.knowledge_graph.get_node_by_name("A")
+        initial_rel = memory.knowledge_graph.get_relationships(a_node.node_id, direction="outgoing")[0]
+        initial_weight = initial_rel.weight
+        
+        # Integrate same relationship again
+        memory.integrate_knowledge({
+            "relationships": [{"source": "A", "target": "B", "type": "related_to"}]
+        })
+        
+        # Weight should have increased
+        updated_rel = memory.knowledge_graph.get_relationships(a_node.node_id, direction="outgoing")[0]
+        assert updated_rel.weight >= initial_weight
+
+    def test_delete_relationship_via_knowledge_graph(self):
+        """Test deleting relationships through knowledge graph."""
+        memory = SemanticMemory()
+        
+        memory.integrate_knowledge({
+            "relationships": [{"source": "X", "target": "Y", "type": "test_rel"}]
+        })
+        
+        x_node = memory.knowledge_graph.get_node_by_name("X")
+        relationships = memory.knowledge_graph.get_relationships(x_node.node_id)
+        assert len(relationships) == 1
+        
+        # Delete the relationship
+        rel_id = relationships[0].relationship_id
+        memory.knowledge_graph.remove_relationship(rel_id)
+        
+        # Verify deletion
+        relationships_after = memory.knowledge_graph.get_relationships(x_node.node_id)
+        assert len(relationships_after) == 0
+
+
+class TestConflictResolutionScenarios:
+    """
+    Tests for conflict resolution scenarios with all strategies.
+    
+    Requirements: 4.5
+    """
+
+    def test_newest_wins_string_attribute(self):
+        """Test newest_wins strategy with string attribute conflict."""
+        memory = SemanticMemory(config={"conflict_resolution_strategy": "newest_wins"})
+        
+        memory.integrate_knowledge({
+            "concepts": [{"name": "Server", "type": "computer", "properties": {"status": "running"}}]
+        })
+        
+        result = memory.integrate_knowledge({
+            "concepts": [{"name": "Server", "type": "computer", "properties": {"status": "stopped"}}]
+        })
+        
+        assert len(result.conflicts) == 1
+        assert result.conflicts[0].resolution == "new_wins"
+        
+        definition = memory.get_concept_definition("Server")
+        assert definition["properties"]["status"] == "stopped"
+
+    def test_newest_wins_numeric_attribute(self):
+        """Test newest_wins strategy with numeric attribute conflict."""
+        memory = SemanticMemory(config={"conflict_resolution_strategy": "newest_wins"})
+        
+        memory.integrate_knowledge({
+            "concepts": [{"name": "Counter", "type": "metric", "properties": {"value": 100}}]
+        })
+        
+        memory.integrate_knowledge({
+            "concepts": [{"name": "Counter", "type": "metric", "properties": {"value": 200}}]
+        })
+        
+        definition = memory.get_concept_definition("Counter")
+        assert definition["properties"]["value"] == 200
+
+    def test_highest_confidence_existing_wins(self):
+        """Test highest_confidence strategy where existing value wins."""
+        memory = SemanticMemory(config={"conflict_resolution_strategy": "highest_confidence"})
+        
+        # High confidence initial value
+        memory.integrate_knowledge(
+            {"concepts": [{"name": "Fact", "type": "info", "properties": {"verified": True}}]},
+            confidence=0.95
+        )
+        
+        # Low confidence update
+        result = memory.integrate_knowledge(
+            {"concepts": [{"name": "Fact", "type": "info", "properties": {"verified": False}}]},
+            confidence=0.3
+        )
+        
+        assert len(result.conflicts) == 1
+        assert result.conflicts[0].resolution == "existing_wins_confidence"
+        
+        definition = memory.get_concept_definition("Fact")
+        assert definition["properties"]["verified"] is True
+
+    def test_highest_confidence_new_wins(self):
+        """Test highest_confidence strategy where new value wins."""
+        memory = SemanticMemory(config={"conflict_resolution_strategy": "highest_confidence"})
+        
+        # Low confidence initial value
+        memory.integrate_knowledge(
+            {"concepts": [{"name": "Estimate", "type": "data", "properties": {"amount": 100}}]},
+            confidence=0.3
+        )
+        
+        # High confidence update
+        result = memory.integrate_knowledge(
+            {"concepts": [{"name": "Estimate", "type": "data", "properties": {"amount": 150}}]},
+            confidence=0.9
+        )
+        
+        assert len(result.conflicts) == 1
+        assert result.conflicts[0].resolution == "new_wins_confidence"
+        
+        definition = memory.get_concept_definition("Estimate")
+        assert definition["properties"]["amount"] == 150
+
+    def test_merge_strategy_list_values(self):
+        """Test merge strategy combines list values."""
+        memory = SemanticMemory(config={"conflict_resolution_strategy": "merge"})
+        
+        memory.integrate_knowledge({
+            "concepts": [{"name": "Tags", "type": "collection", "properties": {"items": ["a", "b"]}}]
+        })
+        
+        result = memory.integrate_knowledge({
+            "concepts": [{"name": "Tags", "type": "collection", "properties": {"items": ["b", "c", "d"]}}]
+        })
+        
+        assert len(result.conflicts) == 1
+        assert result.conflicts[0].resolution == "merged"
+        
+        definition = memory.get_concept_definition("Tags")
+        items = definition["properties"]["items"]
+        # Should contain all unique items
+        assert "a" in items
+        assert "b" in items
+        assert "c" in items
+        assert "d" in items
+
+    def test_merge_strategy_dict_values(self):
+        """Test merge strategy combines dict values."""
+        memory = SemanticMemory(config={"conflict_resolution_strategy": "merge"})
+        
+        memory.integrate_knowledge({
+            "concepts": [{"name": "Config", "type": "settings", "properties": {"options": {"key1": "val1"}}}]
+        })
+        
+        result = memory.integrate_knowledge({
+            "concepts": [{"name": "Config", "type": "settings", "properties": {"options": {"key2": "val2"}}}]
+        })
+        
+        assert len(result.conflicts) == 1
+        assert result.conflicts[0].resolution == "merged"
+        
+        definition = memory.get_concept_definition("Config")
+        options = definition["properties"]["options"]
+        assert options["key1"] == "val1"
+        assert options["key2"] == "val2"
+
+    def test_merge_strategy_string_values(self):
+        """Test merge strategy concatenates string values."""
+        memory = SemanticMemory(config={"conflict_resolution_strategy": "merge"})
+        
+        memory.integrate_knowledge({
+            "concepts": [{"name": "Note", "type": "text", "properties": {"content": "First part"}}]
+        })
+        
+        result = memory.integrate_knowledge({
+            "concepts": [{"name": "Note", "type": "text", "properties": {"content": "Second part"}}]
+        })
+        
+        assert len(result.conflicts) == 1
+        assert result.conflicts[0].resolution == "merged"
+        
+        definition = memory.get_concept_definition("Note")
+        content = definition["properties"]["content"]
+        assert "First part" in content
+        assert "Second part" in content
+
+    def test_merge_strategy_unmergeable_falls_back(self):
+        """Test merge strategy falls back to newest_wins for unmergeable types."""
+        memory = SemanticMemory(config={"conflict_resolution_strategy": "merge"})
+        
+        memory.integrate_knowledge({
+            "concepts": [{"name": "Number", "type": "value", "properties": {"val": 10}}]
+        })
+        
+        result = memory.integrate_knowledge({
+            "concepts": [{"name": "Number", "type": "value", "properties": {"val": 20}}]
+        })
+        
+        assert len(result.conflicts) == 1
+        # Should fall back since integers can't be merged
+        assert "merge_failed" in result.conflicts[0].resolution or "new_wins" in result.conflicts[0].resolution
+        
+        definition = memory.get_concept_definition("Number")
+        assert definition["properties"]["val"] == 20
+
+    def test_type_conflict_detection(self):
+        """Test detection of type conflicts."""
+        memory = SemanticMemory()
+        
+        memory.integrate_knowledge({
+            "concepts": [{"name": "Item", "type": "entity"}]
+        })
+        
+        result = memory.integrate_knowledge({
+            "concepts": [{"name": "Item", "type": "attribute"}]
+        })
+        
+        # Should detect type conflict
+        type_conflicts = [c for c in result.conflicts if c.conflict_type == "type"]
+        assert len(type_conflicts) == 1
+        assert type_conflicts[0].existing_value == "entity"
+        assert type_conflicts[0].new_value == "attribute"
+
+    def test_multiple_conflicts_in_single_integration(self):
+        """Test handling multiple conflicts in a single integration."""
+        memory = SemanticMemory(config={"conflict_resolution_strategy": "newest_wins"})
+        
+        memory.integrate_knowledge({
+            "concepts": [{"name": "Multi", "type": "test", "properties": {"a": 1, "b": 2, "c": 3}}]
+        })
+        
+        result = memory.integrate_knowledge({
+            "concepts": [{"name": "Multi", "type": "test", "properties": {"a": 10, "b": 20, "c": 30}}]
+        })
+        
+        assert len(result.conflicts) == 3
+        
+        definition = memory.get_concept_definition("Multi")
+        assert definition["properties"]["a"] == 10
+        assert definition["properties"]["b"] == 20
+        assert definition["properties"]["c"] == 30
+
+
+class TestSerializationRoundTrip:
+    """
+    Comprehensive tests for serialization round-trip.
+    
+    Requirements: 4.6
+    """
+
+    def test_empty_memory_round_trip(self):
+        """Test serialization of empty semantic memory."""
+        memory = SemanticMemory()
+        
+        data = memory.to_dict()
+        restored = SemanticMemory.from_dict(data)
+        
+        assert len(restored) == 0
+        assert restored._total_integrations == 0
+
+    def test_single_concept_round_trip(self):
+        """Test serialization with a single concept."""
+        memory = SemanticMemory()
+        
+        memory.integrate_knowledge({
+            "concepts": [{"name": "Test", "type": "entity", "properties": {"key": "value"}}]
+        })
+        
+        data = memory.to_dict()
+        restored = SemanticMemory.from_dict(data)
+        
+        assert "Test" in restored
+        definition = restored.get_concept_definition("Test")
+        assert definition["properties"]["key"] == "value"
+
+    def test_complex_graph_round_trip(self):
+        """Test serialization with complex graph structure."""
+        memory = SemanticMemory()
+        
+        # Create a complex graph
+        memory.integrate_knowledge({
+            "concepts": [
+                {"name": "Animal", "type": "category"},
+                {"name": "Dog", "type": "species", "properties": {"legs": 4}},
+                {"name": "Cat", "type": "species", "properties": {"legs": 4}},
+                {"name": "Bird", "type": "species", "properties": {"legs": 2, "can_fly": True}},
+            ],
+            "relationships": [
+                {"source": "Dog", "target": "Animal", "type": "is_a"},
+                {"source": "Cat", "target": "Animal", "type": "is_a"},
+                {"source": "Bird", "target": "Animal", "type": "is_a"},
+            ]
+        })
+        
+        data = memory.to_dict()
+        restored = SemanticMemory.from_dict(data)
+        
+        # Verify all concepts
+        assert "Animal" in restored
+        assert "Dog" in restored
+        assert "Cat" in restored
+        assert "Bird" in restored
+        
+        # Verify properties
+        dog_def = restored.get_concept_definition("Dog")
+        assert dog_def["properties"]["legs"] == 4
+        
+        bird_def = restored.get_concept_definition("Bird")
+        assert bird_def["properties"]["can_fly"] is True
+        
+        # Verify relationships
+        dog_node = restored.knowledge_graph.get_node_by_name("Dog")
+        dog_rels = restored.knowledge_graph.get_relationships(dog_node.node_id, direction="outgoing")
+        assert len(dog_rels) >= 1
+        assert any(r.relationship_type == "is_a" for r in dog_rels)
+
+    def test_config_preserved_in_round_trip(self):
+        """Test that configuration is preserved in serialization."""
+        config = {
+            "conflict_resolution_strategy": "highest_confidence",
+            "similarity_threshold": 0.75,
+            "max_query_results": 50,
+        }
+        memory = SemanticMemory(config=config)
+        
+        data = memory.to_dict()
+        restored = SemanticMemory.from_dict(data)
+        
+        assert restored._config.conflict_resolution_strategy == "highest_confidence"
+        assert restored._config.similarity_threshold == 0.75
+        assert restored._config.max_query_results == 50
+
+    def test_statistics_preserved_in_round_trip(self):
+        """Test that statistics are preserved in serialization."""
+        memory = SemanticMemory()
+        
+        # Perform multiple integrations to build up statistics
+        for i in range(5):
+            memory.integrate_knowledge({
+                "concepts": [{"name": f"Concept{i}", "type": "entity"}]
+            })
+        
+        original_integrations = memory._total_integrations
+        
+        data = memory.to_dict()
+        restored = SemanticMemory.from_dict(data)
+        
+        assert restored._total_integrations == original_integrations
+
+    def test_knowledge_graph_to_dict_from_dict(self):
+        """Test KnowledgeGraph serialization directly."""
+        memory = SemanticMemory()
+        
+        memory.integrate_knowledge({
+            "concepts": [
+                {"name": "Node1", "type": "entity", "properties": {"prop1": "val1"}},
+                {"name": "Node2", "type": "entity"},
+            ],
+            "relationships": [
+                {"source": "Node1", "target": "Node2", "type": "connects_to", "weight": 0.8}
+            ]
+        })
+        
+        # Serialize knowledge graph directly
+        kg_data = memory.knowledge_graph.to_dict()
+        
+        assert "nodes" in kg_data
+        assert "relationships" in kg_data
+        assert "config" in kg_data
+        
+        # Verify node data
+        assert len(kg_data["nodes"]) == 2
+        
+        # Verify relationship data
+        assert len(kg_data["relationships"]) == 1
+
+    def test_semantic_memory_to_dict_structure(self):
+        """Test the structure of SemanticMemory.to_dict() output."""
+        memory = SemanticMemory()
+        
+        memory.integrate_knowledge({
+            "concepts": [{"name": "Test", "type": "entity"}]
+        })
+        
+        data = memory.to_dict()
+        
+        # Verify required keys
+        assert "config" in data
+        assert "knowledge_graph" in data
+        assert "total_integrations" in data
+        assert "total_conflicts" in data
+        assert "total_extractions" in data
+        assert "total_consolidations" in data
+        assert "initialized_at" in data
+        
+        # Verify types
+        assert isinstance(data["config"], dict)
+        assert isinstance(data["knowledge_graph"], dict)
+        assert isinstance(data["total_integrations"], int)
+        assert isinstance(data["initialized_at"], float)
+
+    def test_integration_result_round_trip(self):
+        """Test IntegrationResult serialization round-trip."""
+        result = IntegrationResult(
+            new_concepts=["c1", "c2"],
+            updated_concepts=["c3"],
+            new_relationships=["r1", "r2"],
+            conflicts=[
+                ConflictInfo(
+                    conflict_id="conflict-1",
+                    existing_node_id="node-1",
+                    existing_value="old",
+                    new_value="new",
+                    conflict_type="attribute",
+                    resolution="new_wins",
+                    property_key="key1",
+                )
+            ],
+            resolution_actions=["Created c1", "Updated c3"],
+            success=True,
+        )
+        
+        data = result.to_dict()
+        restored = IntegrationResult.from_dict(data)
+        
+        assert restored.new_concepts == result.new_concepts
+        assert restored.updated_concepts == result.updated_concepts
+        assert restored.new_relationships == result.new_relationships
+        assert len(restored.conflicts) == 1
+        assert restored.conflicts[0].conflict_id == "conflict-1"
+        assert restored.resolution_actions == result.resolution_actions
+        assert restored.success == result.success
+
+    def test_extraction_result_round_trip(self):
+        """Test ExtractionResult serialization round-trip."""
+        result = ExtractionResult(
+            extracted_concepts=["Python", "Java", "JavaScript"],
+            extracted_relationships=[
+                ("Python", "is_a", "Language"),
+                ("Java", "is_a", "Language"),
+            ],
+            episodes_processed=10,
+            patterns_found=5,
+        )
+        
+        data = result.to_dict()
+        restored = ExtractionResult.from_dict(data)
+        
+        assert restored.extracted_concepts == result.extracted_concepts
+        assert restored.extracted_relationships == result.extracted_relationships
+        assert restored.episodes_processed == result.episodes_processed
+        assert restored.patterns_found == result.patterns_found
+
+    def test_consolidation_result_round_trip(self):
+        """Test ConsolidationResult serialization round-trip."""
+        result = ConsolidationResult(
+            merged_concepts=[("kept1", "removed1"), ("kept2", "removed2")],
+            strengthened_relationships=["r1", "r2", "r3"],
+            pruned_concepts=["p1"],
+            pruned_relationships=["pr1", "pr2"],
+            statistics={"total_concepts": 10, "total_relationships": 20},
+        )
+        
+        data = result.to_dict()
+        restored = ConsolidationResult.from_dict(data)
+        
+        assert restored.merged_concepts == result.merged_concepts
+        assert restored.strengthened_relationships == result.strengthened_relationships
+        assert restored.pruned_concepts == result.pruned_concepts
+        assert restored.pruned_relationships == result.pruned_relationships
+        assert restored.statistics == result.statistics
+
+    def test_conflict_info_round_trip(self):
+        """Test ConflictInfo serialization round-trip."""
+        conflict = ConflictInfo(
+            conflict_id="test-conflict",
+            existing_node_id="node-123",
+            existing_value={"nested": "value"},
+            new_value={"nested": "new_value"},
+            conflict_type="attribute",
+            resolution="merged",
+            property_key="data",
+            timestamp=1234567890.0,
+        )
+        
+        data = conflict.to_dict()
+        restored = ConflictInfo.from_dict(data)
+        
+        assert restored.conflict_id == conflict.conflict_id
+        assert restored.existing_node_id == conflict.existing_node_id
+        assert restored.existing_value == conflict.existing_value
+        assert restored.new_value == conflict.new_value
+        assert restored.conflict_type == conflict.conflict_type
+        assert restored.resolution == conflict.resolution
+        assert restored.property_key == conflict.property_key
+        assert restored.timestamp == conflict.timestamp
+
+    def test_round_trip_preserves_node_access_counts(self):
+        """Test that node access counts are preserved in round-trip."""
+        memory = SemanticMemory()
+        
+        memory.integrate_knowledge({
+            "concepts": [{"name": "Popular", "type": "entity"}]
+        })
+        
+        # Access the node multiple times
+        for _ in range(10):
+            memory.query("Popular")
+        
+        node_before = memory.knowledge_graph.get_node_by_name("Popular", record_access=False)
+        access_count_before = node_before.access_count
+        
+        data = memory.to_dict()
+        restored = SemanticMemory.from_dict(data)
+        
+        node_after = restored.knowledge_graph.get_node_by_name("Popular", record_access=False)
+        assert node_after.access_count == access_count_before
+
+    def test_round_trip_preserves_relationship_weights(self):
+        """Test that relationship weights are preserved in round-trip."""
+        memory = SemanticMemory()
+        
+        memory.integrate_knowledge({
+            "relationships": [
+                {"source": "A", "target": "B", "type": "strong", "weight": 0.95},
+                {"source": "C", "target": "D", "type": "weak", "weight": 0.15},
+            ]
+        })
+        
+        data = memory.to_dict()
+        restored = SemanticMemory.from_dict(data)
+        
+        a_node = restored.knowledge_graph.get_node_by_name("A")
+        a_rels = restored.knowledge_graph.get_relationships(a_node.node_id, direction="outgoing")
+        assert len(a_rels) == 1
+        assert abs(a_rels[0].weight - 0.95) < 0.01
+        
+        c_node = restored.knowledge_graph.get_node_by_name("C")
+        c_rels = restored.knowledge_graph.get_relationships(c_node.node_id, direction="outgoing")
+        assert len(c_rels) == 1
+        assert abs(c_rels[0].weight - 0.15) < 0.01

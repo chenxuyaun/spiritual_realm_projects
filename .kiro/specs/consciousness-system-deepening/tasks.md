@@ -120,7 +120,7 @@ This implementation plan breaks down the consciousness system deepening feature 
     - Test consolidation output
     - _Requirements: 3.1-3.6_
 
-- [ ] 6. Implement Semantic Memory and Knowledge Graph
+- [x] 6. Implement Semantic Memory and Knowledge Graph
   - [x] 6.1 Create KnowledgeGraph module
     - Create `mm_orch/consciousness/knowledge_graph.py`
     - Implement ConceptNode and Relationship dataclasses
@@ -146,7 +146,7 @@ This implementation plan breaks down the consciousness system deepening feature 
     - **Property 20: Knowledge Graph Serialization Round-Trip**
     - **Validates: Requirements 4.1-4.6**
   
-  - [-] 6.4 Write unit tests for semantic memory
+  - [x] 6.4 Write unit tests for semantic memory
     - Test knowledge graph operations
     - Test conflict resolution scenarios
     - Test serialization round-trip
