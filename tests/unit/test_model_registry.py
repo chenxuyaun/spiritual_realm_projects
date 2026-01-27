@@ -126,6 +126,7 @@ class TestModelMetadata:
             assert metadata.preferred_device_policy == policy
 
 
+
 class TestModelRegistry:
     """Test ModelRegistry functionality."""
 
@@ -318,6 +319,7 @@ class TestModelRegistry:
             registry.unregister("nonexistent-model")
 
 
+
 class TestGlobalRegistry:
     """Test global registry singleton."""
 
@@ -394,6 +396,7 @@ class TestGlobalRegistry:
 
         embedder_names = [m.name for m in embedders]
         assert "sentence-transformers/all-MiniLM-L6-v2" in embedder_names
+
 
 
 class TestModelMetadataValidation:
