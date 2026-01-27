@@ -15,6 +15,15 @@ from mm_orch.exceptions import ModelError, ResourceError
 from mm_orch.logger import get_logger
 from mm_orch.schemas import ModelConfig
 
+# Optional optimization support
+try:
+    from mm_orch.optimization.manager import OptimizationManager, InferenceResult
+    OPTIMIZATION_AVAILABLE = True
+except ImportError:
+    OPTIMIZATION_AVAILABLE = False
+    OptimizationManager = None
+    InferenceResult = None
+
 
 @dataclass
 class ModelUsageStats:
@@ -66,6 +75,8 @@ class ModelManager:
         default_device: str = "auto",
         enable_quantization: bool = True,
         residency_seconds: int = 30,
+        optimization_manager: Optional[Any] = None,
+        enable_optimization: bool = False,
     ):
         """
         初始化模型管理器
@@ -75,11 +86,23 @@ class ModelManager:
             default_device: 默认设备 ('auto', 'cuda', 'cpu')
             enable_quantization: 是否启用量化
             residency_seconds: 模型驻留时间（秒），超过此时间未使用的模型将被标记为可卸载
+            optimization_manager: Optional OptimizationManager for advanced inference
+            enable_optimization: Whether to use OptimizationManager when available
         """
         self.max_cached_models = max_cached_models
         self.default_device = default_device
         self.enable_quantization = enable_quantization
         self.residency_seconds = residency_seconds
+
+        # Optimization support (Requirement 13.1, 13.3, 13.4)
+        self.optimization_manager = optimization_manager
+        self.enable_optimization = enable_optimization and OPTIMIZATION_AVAILABLE
+        
+        if enable_optimization and not OPTIMIZATION_AVAILABLE:
+            self._logger.warning(
+                "Optimization requested but optimization module not available. "
+                "Falling back to standard inference."
+            )
 
         # 使用OrderedDict实现LRU缓存
         self._cache: OrderedDict[str, CachedModel] = OrderedDict()
@@ -623,6 +646,82 @@ class ModelManager:
         Raises:
             ModelError: 推理失败时抛出
         """
+        # Try optimization path if enabled (Requirement 13.1, 13.4)
+        if self.enable_optimization and self.optimization_manager:
+            try:
+                return self._infer_with_optimization(model_name, inputs, **kwargs)
+            except Exception as e:
+                # Fallback to standard inference on optimization failure (Requirement 13.1)
+                self._logger.warning(
+                    f"Optimization inference failed, falling back to standard: {e}"
+                )
+        
+        # Standard inference path (backward compatible)
+        return self._infer_standard(model_name, inputs, **kwargs)
+    
+    def _infer_with_optimization(
+        self, model_name: str, inputs: Union[str, List[str]], **kwargs
+    ) -> Any:
+        """
+        Execute inference using OptimizationManager.
+        
+        Args:
+            model_name: Model identifier
+            inputs: Input text or list of texts
+            **kwargs: Additional generation parameters
+            
+        Returns:
+            Model output
+            
+        Raises:
+            ModelError: If inference fails
+        """
+        # Prepare inputs for optimization manager
+        if isinstance(inputs, str):
+            prompts = [inputs]
+        else:
+            prompts = inputs
+        
+        # Build inference inputs
+        inference_inputs = {
+            "prompts": prompts,
+            "sampling_params": {
+                "max_new_tokens": kwargs.get("max_new_tokens", 256),
+                "temperature": kwargs.get("temperature", 0.7),
+                "do_sample": kwargs.get("do_sample", True),
+            }
+        }
+        
+        # Execute with optimization manager
+        result: InferenceResult = self.optimization_manager.infer(
+            model_name=model_name,
+            inputs=inference_inputs,
+            engine_preference=kwargs.get("engine_preference")
+        )
+        
+        # Extract outputs from result
+        outputs = result.outputs.get("outputs", [])
+        
+        # Return single output or list based on input
+        if isinstance(inputs, str) and len(outputs) == 1:
+            return outputs[0]
+        return outputs
+    
+    def _infer_standard(self, model_name: str, inputs: Union[str, List[str]], **kwargs) -> Any:
+        """
+        Execute standard inference (original implementation).
+        
+        Args:
+            model_name: Model identifier
+            inputs: Input text or list of texts
+            **kwargs: Additional generation parameters
+            
+        Returns:
+            Model output
+            
+        Raises:
+            ModelError: If inference fails
+        """
         cached = self.get_model(model_name)
         
         # 记录推理开始时间
@@ -841,7 +940,8 @@ def get_model_manager(max_cached_models: int = 3, default_device: str = "auto", 
         _global_model_manager = ModelManager(
             max_cached_models=max_cached_models, 
             default_device=default_device,
-            residency_seconds=residency_seconds
+            residency_seconds=residency_seconds,
+            enable_optimization=False  # Default to disabled for backward compatibility
         )
 
     return _global_model_manager
@@ -851,7 +951,9 @@ def configure_model_manager(
     max_cached_models: int = 3, 
     default_device: str = "auto", 
     enable_quantization: bool = True,
-    residency_seconds: int = 30
+    residency_seconds: int = 30,
+    optimization_manager: Optional[Any] = None,
+    enable_optimization: bool = False,
 ) -> ModelManager:
     """
     配置全局模型管理器
@@ -861,6 +963,8 @@ def configure_model_manager(
         default_device: 默认设备
         enable_quantization: 是否启用量化
         residency_seconds: 模型驻留时间（秒）
+        optimization_manager: Optional OptimizationManager for advanced inference
+        enable_optimization: Whether to use OptimizationManager when available
 
     Returns:
         配置后的ModelManager实例
@@ -871,5 +975,7 @@ def configure_model_manager(
         default_device=default_device,
         enable_quantization=enable_quantization,
         residency_seconds=residency_seconds,
+        optimization_manager=optimization_manager,
+        enable_optimization=enable_optimization,
     )
     return _global_model_manager

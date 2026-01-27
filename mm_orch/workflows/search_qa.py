@@ -25,6 +25,14 @@ from mm_orch.tools.fetch_url import URLFetchTool, FetchedContent, get_url_fetch_
 from mm_orch.exceptions import ValidationError, WorkflowError, NetworkError, ModelError
 from mm_orch.logger import get_logger
 
+# Optional monitoring support
+try:
+    from mm_orch.monitoring.otel_tracer import OTelTracer
+    MONITORING_AVAILABLE = True
+except ImportError:
+    MONITORING_AVAILABLE = False
+    OTelTracer = None
+
 if TYPE_CHECKING:
     from mm_orch.runtime.real_model_manager import RealModelManager
     from mm_orch.runtime.inference_engine import InferenceEngine
@@ -138,6 +146,7 @@ class SearchQAWorkflow(BaseWorkflow):
         model_manager: Optional[Any] = None,
         real_model_manager: Optional["RealModelManager"] = None,
         inference_engine: Optional["InferenceEngine"] = None,
+        tracer: Optional["OTelTracer"] = None,
         max_search_results: int = 5,
         max_content_length: int = 2000,
         summarizer_model: str = "t5-small",
@@ -154,6 +163,7 @@ class SearchQAWorkflow(BaseWorkflow):
             model_manager: Model manager for summarization and generation (mock)
             real_model_manager: Real model manager for actual LLM inference
             inference_engine: Inference engine for real model generation
+            tracer: Optional OpenTelemetry tracer for distributed tracing
             max_search_results: Maximum search results to process
             max_content_length: Maximum content length per source
             summarizer_model: Model name for summarization
@@ -167,6 +177,7 @@ class SearchQAWorkflow(BaseWorkflow):
         self.model_manager = model_manager
         self.real_model_manager = real_model_manager
         self.inference_engine = inference_engine
+        self.tracer = tracer if MONITORING_AVAILABLE else None
         self.max_search_results = max_search_results
         self.max_content_length = max_content_length
         self.summarizer_model = summarizer_model
@@ -231,45 +242,66 @@ class SearchQAWorkflow(BaseWorkflow):
         max_results = parameters.get("max_results", self.max_search_results)
         include_sources = parameters.get("include_sources", True)
 
-        # Initialize context
-        ctx = SearchQAContext(query=query)
+        # Create tracing span for workflow execution (Requirement 13.4)
+        span = None
+        if self.tracer:
+            try:
+                span = self.tracer.trace_workflow(
+                    workflow_name="SearchQA",
+                    query=query,
+                    max_results=max_results
+                ).__enter__()
+            except Exception as e:
+                logger.warning(f"Failed to create workflow span: {e}")
+                span = None
 
         try:
-            # Step 1: Search
-            ctx = self._step_search(ctx, max_results)
+            # Initialize context
+            ctx = SearchQAContext(query=query)
 
-            # Check if we have any results
-            if not ctx.search_results:
-                return self._create_result(ctx, status="partial", error="No search results found")
+            try:
+                # Step 1: Search
+                ctx = self._step_search(ctx, max_results)
 
-            # Step 2: Fetch content
-            ctx = self._step_fetch(ctx)
+                # Check if we have any results
+                if not ctx.search_results:
+                    return self._create_result(ctx, status="partial", error="No search results found")
 
-            # Check if we have any content
-            successful_fetches = [f for f in ctx.fetched_contents if f.success]
-            if not successful_fetches:
-                # Degrade: use search snippets as content
-                ctx = self._degrade_use_snippets(ctx)
+                # Step 2: Fetch content
+                ctx = self._step_fetch(ctx)
 
-            # Step 3: Summarize
-            ctx = self._step_summarize(ctx)
+                # Check if we have any content
+                successful_fetches = [f for f in ctx.fetched_contents if f.success]
+                if not successful_fetches:
+                    # Degrade: use search snippets as content
+                    ctx = self._degrade_use_snippets(ctx)
 
-            # Step 4: Generate answer
-            ctx = self._step_generate_answer(ctx)
+                # Step 3: Summarize
+                ctx = self._step_summarize(ctx)
 
-            # Determine final status
-            status = "partial" if ctx.degraded else "success"
+                # Step 4: Generate answer
+                ctx = self._step_generate_answer(ctx)
 
-            return self._create_result(ctx, status=status, include_sources=include_sources)
+                # Determine final status
+                status = "partial" if ctx.degraded else "success"
 
-        except Exception as e:
-            logger.error("SearchQA workflow failed", error=str(e), query=query[:50])
-            return self._create_result(
-                ctx,
-                status="partial" if ctx.answer or ctx.summaries else "failed",
-                error=str(e),
-                include_sources=include_sources,
-            )
+                return self._create_result(ctx, status=status, include_sources=include_sources)
+
+            except Exception as e:
+                logger.error("SearchQA workflow failed", error=str(e), query=query[:50])
+                return self._create_result(
+                    ctx,
+                    status="partial" if ctx.answer or ctx.summaries else "failed",
+                    error=str(e),
+                    include_sources=include_sources,
+                )
+        finally:
+            # Close span if it was created
+            if span:
+                try:
+                    span.__exit__(None, None, None)
+                except Exception as e:
+                    logger.warning(f"Failed to close workflow span: {e}")
 
     def _step_search(self, ctx: SearchQAContext, max_results: int) -> SearchQAContext:
         """

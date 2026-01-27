@@ -97,6 +97,38 @@ class PrometheusExporter:
             ['gpu_id']
         )
         
+        # GPU memory available gauge (in bytes)
+        # Requirement 11.5: Per-GPU metrics
+        self.gpu_memory_available = Gauge(
+            'gpu_memory_available_bytes',
+            'GPU memory available in bytes',
+            ['gpu_id']
+        )
+        
+        # GPU utilization gauge (percentage)
+        # Requirement 11.5: Per-GPU metrics
+        self.gpu_utilization = Gauge(
+            'gpu_utilization_percent',
+            'GPU utilization percentage',
+            ['gpu_id']
+        )
+        
+        # GPU temperature gauge (Celsius)
+        # Requirement 11.5: Per-GPU metrics
+        self.gpu_temperature = Gauge(
+            'gpu_temperature_celsius',
+            'GPU temperature in Celsius',
+            ['gpu_id']
+        )
+        
+        # GPU health status gauge (1=healthy, 0=unhealthy)
+        # Requirement 11.4: GPU failure detection
+        self.gpu_health_status = Gauge(
+            'gpu_health_status',
+            'GPU health status (1=healthy, 0=unhealthy)',
+            ['gpu_id']
+        )
+        
         # CPU usage gauge (percentage)
         # Requirement 4.6: Record CPU usage
         self.cpu_usage = Gauge(
@@ -288,6 +320,101 @@ class PrometheusExporter:
                 
         except Exception as e:
             logger.error(f"Failed to record resource usage: {e}")
+    
+    def record_per_gpu_metrics(
+        self,
+        gpu_id: int,
+        memory_used_mb: float,
+        memory_available_mb: float,
+        utilization_percent: float,
+        temperature_celsius: Optional[float] = None,
+        is_healthy: bool = True
+    ):
+        """
+        Record comprehensive per-GPU metrics.
+        
+        Args:
+            gpu_id: GPU device ID
+            memory_used_mb: GPU memory used in MB
+            memory_available_mb: GPU memory available in MB
+            utilization_percent: GPU utilization percentage (0-100)
+            temperature_celsius: GPU temperature in Celsius (optional)
+            is_healthy: Whether GPU is healthy
+            
+        Requirement 11.5: Per-GPU metrics are exposed
+        """
+        if not self.enabled:
+            return
+        
+        try:
+            gpu_label = str(gpu_id)
+            
+            # Memory metrics
+            self.gpu_memory_used.labels(gpu_id=gpu_label).set(
+                memory_used_mb * 1024 * 1024  # Convert to bytes
+            )
+            self.gpu_memory_available.labels(gpu_id=gpu_label).set(
+                memory_available_mb * 1024 * 1024  # Convert to bytes
+            )
+            
+            # Utilization metric
+            self.gpu_utilization.labels(gpu_id=gpu_label).set(utilization_percent)
+            
+            # Temperature metric (if available)
+            if temperature_celsius is not None:
+                self.gpu_temperature.labels(gpu_id=gpu_label).set(temperature_celsius)
+            
+            # Health status metric
+            self.gpu_health_status.labels(gpu_id=gpu_label).set(1 if is_healthy else 0)
+            
+        except Exception as e:
+            logger.error(f"Failed to record per-GPU metrics for GPU {gpu_id}: {e}")
+    
+    def record_all_gpu_metrics(self, gpu_metrics: Dict[int, Dict[str, float]]):
+        """
+        Record metrics for all GPUs at once.
+        
+        Args:
+            gpu_metrics: Dictionary mapping GPU ID to metrics dictionary
+                        Each metrics dict should contain:
+                        - memory_used_mb
+                        - memory_available_mb
+                        - utilization_percent
+                        - temperature_celsius (optional)
+                        - is_healthy (optional, defaults to True)
+        
+        Requirement 11.5: Per-GPU metrics are exposed
+        
+        Example:
+            >>> exporter = PrometheusExporter()
+            >>> metrics = {
+            ...     0: {
+            ...         'memory_used_mb': 8192,
+            ...         'memory_available_mb': 7808,
+            ...         'utilization_percent': 75.5,
+            ...         'temperature_celsius': 65.0,
+            ...         'is_healthy': True
+            ...     },
+            ...     1: {
+            ...         'memory_used_mb': 4096,
+            ...         'memory_available_mb': 11904,
+            ...         'utilization_percent': 45.2,
+            ...     }
+            ... }
+            >>> exporter.record_all_gpu_metrics(metrics)
+        """
+        if not self.enabled:
+            return
+        
+        for gpu_id, metrics in gpu_metrics.items():
+            self.record_per_gpu_metrics(
+                gpu_id=gpu_id,
+                memory_used_mb=metrics.get('memory_used_mb', 0),
+                memory_available_mb=metrics.get('memory_available_mb', 0),
+                utilization_percent=metrics.get('utilization_percent', 0),
+                temperature_celsius=metrics.get('temperature_celsius'),
+                is_healthy=metrics.get('is_healthy', True)
+            )
     
     def record_model_lifecycle(
         self,

@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from mm_orch.logger import get_logger
 from mm_orch.optimization.config import VLLMConfig
+from mm_orch.optimization.gpu_utils import get_gpu_manager
 
 logger = get_logger(__name__)
 
@@ -46,6 +47,8 @@ class VLLMEngine:
         self.config = config
         self._llm = None
         self._loaded_model: Optional[str] = None
+        self._gpu_manager = get_gpu_manager()
+        self._allocated_gpus: Optional[List[int]] = None
         
         logger.info(
             f"VLLMEngine initialized with config: "
@@ -96,6 +99,8 @@ class VLLMEngine:
         """
         Load model into vLLM engine with tensor parallelism configuration.
         
+        Automatically detects and allocates GPUs for tensor parallelism.
+        
         Args:
             model_name: HuggingFace model name or path to load
             tensor_parallel_size: Override config tensor parallelism (optional)
@@ -124,6 +129,23 @@ class VLLMEngine:
             # Use provided parameters or fall back to config
             tp_size = tensor_parallel_size or self.config.tensor_parallel_size
             model_dtype = dtype or self.config.dtype
+            
+            # Allocate GPUs if tensor parallelism is requested
+            if tp_size > 1:
+                try:
+                    gpu_ids, strategy = self._gpu_manager.allocate_gpus(
+                        tensor_parallel=tp_size
+                    )
+                    self._allocated_gpus = gpu_ids
+                    logger.info(
+                        f"Allocated {len(gpu_ids)} GPUs for tensor parallelism: {gpu_ids}"
+                    )
+                except RuntimeError as e:
+                    logger.error(f"GPU allocation failed: {e}")
+                    # Fall back to single GPU if allocation fails
+                    logger.warning("Falling back to single GPU mode")
+                    tp_size = 1
+                    self._allocated_gpus = None
             
             logger.info(
                 f"Loading model {model_name} with vLLM "
@@ -165,6 +187,7 @@ class VLLMEngine:
             # Clean up partial initialization
             self._llm = None
             self._loaded_model = None
+            self._allocated_gpus = None
             raise RuntimeError(f"vLLM model loading failed: {e}") from e
             
         except Exception as e:
@@ -175,6 +198,7 @@ class VLLMEngine:
             # Clean up partial initialization
             self._llm = None
             self._loaded_model = None
+            self._allocated_gpus = None
             return False
     
     def generate(
@@ -277,6 +301,7 @@ class VLLMEngine:
             # and rely on Python garbage collection
             self._llm = None
             self._loaded_model = None
+            self._allocated_gpus = None
             
             # Force garbage collection to free GPU memory
             import gc
@@ -301,6 +326,21 @@ class VLLMEngine:
             'qwen-chat'
         """
         return self._loaded_model
+    
+    def get_allocated_gpus(self) -> Optional[List[int]]:
+        """
+        Get the list of GPUs allocated for tensor parallelism.
+        
+        Returns:
+            List of GPU IDs if allocated, None otherwise
+        
+        Example:
+            >>> engine = VLLMEngine(VLLMConfig(tensor_parallel_size=2))
+            >>> engine.load_model("qwen-chat")
+            >>> print(engine.get_allocated_gpus())
+            [0, 1]
+        """
+        return self._allocated_gpus
     
     def __del__(self):
         """Cleanup when engine is destroyed."""

@@ -36,6 +36,14 @@ from mm_orch.storage.chat_storage import ChatStorage, get_chat_storage
 from mm_orch.exceptions import ValidationError, WorkflowError
 from mm_orch.logger import get_logger
 
+# Optional monitoring support
+try:
+    from mm_orch.monitoring.otel_tracer import OTelTracer
+    MONITORING_AVAILABLE = True
+except ImportError:
+    MONITORING_AVAILABLE = False
+    OTelTracer = None
+
 if TYPE_CHECKING:
     from mm_orch.runtime.real_model_manager import RealModelManager
     from mm_orch.runtime.inference_engine import InferenceEngine
@@ -121,6 +129,7 @@ class ChatGenerateWorkflow(BaseWorkflow):
         real_model_manager: Optional["RealModelManager"] = None,
         inference_engine: Optional["InferenceEngine"] = None,
         conversation_manager: Optional["ConversationManager"] = None,
+        tracer: Optional["OTelTracer"] = None,
         generator_model: str = "gpt2",
         model_type: str = "gpt2",
         max_history_turns: int = 10,
@@ -138,6 +147,7 @@ class ChatGenerateWorkflow(BaseWorkflow):
             real_model_manager: Real model manager for actual LLM inference
             inference_engine: Inference engine for real model generation
             conversation_manager: Conversation manager for prompt building
+            tracer: Optional OpenTelemetry tracer for distributed tracing
             generator_model: Model name for response generation
             model_type: Model type for conversation format ("qwen-chat", "gpt2", etc.)
             max_history_turns: Maximum history turns to include in context
@@ -152,6 +162,7 @@ class ChatGenerateWorkflow(BaseWorkflow):
         self.real_model_manager = real_model_manager
         self.inference_engine = inference_engine
         self.conversation_manager = conversation_manager
+        self.tracer = tracer if MONITORING_AVAILABLE else None
         self.generator_model = generator_model
         self.model_type = model_type
         self.max_history_turns = max_history_turns
@@ -236,37 +247,58 @@ class ChatGenerateWorkflow(BaseWorkflow):
         temperature = parameters.get("temperature", 0.7)
         custom_system_prompt = parameters.get("system_prompt")
 
-        # Initialize context
-        ctx = ChatGenerateContext(session_id=session_id or "", message=message)
+        # Create tracing span for workflow execution (Requirement 13.4)
+        span = None
+        if self.tracer:
+            try:
+                span = self.tracer.trace_workflow(
+                    workflow_name="ChatGenerate",
+                    session_id=session_id or "new",
+                    message_length=len(message)
+                ).__enter__()
+            except Exception as e:
+                logger.warning(f"Failed to create workflow span: {e}")
+                span = None
 
         try:
-            # Step 1: Get or create session
-            ctx = self._step_get_session(ctx, session_id)
+            # Initialize context
+            ctx = ChatGenerateContext(session_id=session_id or "", message=message)
 
-            # Step 2: Retrieve history
-            ctx = self._step_retrieve_history(ctx, max_history)
+            try:
+                # Step 1: Get or create session
+                ctx = self._step_get_session(ctx, session_id)
 
-            # Step 3: Build context
-            ctx = self._step_build_context(ctx, custom_system_prompt)
+                # Step 2: Retrieve history
+                ctx = self._step_retrieve_history(ctx, max_history)
 
-            # Step 4: Generate response
-            ctx = self._step_generate_response(ctx, temperature)
+                # Step 3: Build context
+                ctx = self._step_build_context(ctx, custom_system_prompt)
 
-            if not ctx.response:
+                # Step 4: Generate response
+                ctx = self._step_generate_response(ctx, temperature)
+
+                if not ctx.response:
+                    return self._create_result(
+                        ctx, status="failed", error="Failed to generate response"
+                    )
+
+                # Step 5: Update history
+                ctx = self._step_update_history(ctx)
+
+                return self._create_result(ctx, status="success")
+
+            except Exception as e:
+                logger.error("ChatGenerate workflow failed", error=str(e), session_id=ctx.session_id)
                 return self._create_result(
-                    ctx, status="failed", error="Failed to generate response"
+                    ctx, status="partial" if ctx.response else "failed", error=str(e)
                 )
-
-            # Step 5: Update history
-            ctx = self._step_update_history(ctx)
-
-            return self._create_result(ctx, status="success")
-
-        except Exception as e:
-            logger.error("ChatGenerate workflow failed", error=str(e), session_id=ctx.session_id)
-            return self._create_result(
-                ctx, status="partial" if ctx.response else "failed", error=str(e)
-            )
+        finally:
+            # Close span if it was created
+            if span:
+                try:
+                    span.__exit__(None, None, None)
+                except Exception as e:
+                    logger.warning(f"Failed to close workflow span: {e}")
 
     def _step_get_session(
         self, ctx: ChatGenerateContext, session_id: Optional[str]

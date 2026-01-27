@@ -23,6 +23,14 @@ from mm_orch.runtime.vector_db import VectorDBManager, get_vector_db
 from mm_orch.exceptions import ValidationError, WorkflowError, ResourceError
 from mm_orch.logger import get_logger
 
+# Optional monitoring support
+try:
+    from mm_orch.monitoring.otel_tracer import OTelTracer
+    MONITORING_AVAILABLE = True
+except ImportError:
+    MONITORING_AVAILABLE = False
+    OTelTracer = None
+
 
 logger = get_logger(__name__)
 
@@ -86,6 +94,7 @@ class RAGQAWorkflow(BaseWorkflow):
         self,
         vector_db: Optional[VectorDBManager] = None,
         model_manager: Optional[Any] = None,
+        tracer: Optional["OTelTracer"] = None,
         embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
         generator_model: str = "gpt2",
         default_top_k: int = 5,
@@ -97,6 +106,7 @@ class RAGQAWorkflow(BaseWorkflow):
         Args:
             vector_db: Vector database manager instance
             model_manager: Model manager for embedding and generation
+            tracer: Optional OpenTelemetry tracer for distributed tracing
             embedding_model: Model name for query embedding
             generator_model: Model name for answer generation
             default_top_k: Default number of documents to retrieve
@@ -105,6 +115,7 @@ class RAGQAWorkflow(BaseWorkflow):
         super().__init__()
         self.vector_db = vector_db
         self.model_manager = model_manager
+        self.tracer = tracer if MONITORING_AVAILABLE else None
         self.embedding_model = embedding_model
         self.generator_model = generator_model
         self.default_top_k = default_top_k
@@ -181,52 +192,73 @@ class RAGQAWorkflow(BaseWorkflow):
         include_sources = parameters.get("include_sources", True)
         threshold = parameters.get("threshold")
 
-        # Initialize context
-        ctx = RAGQAContext(query=query)
+        # Create tracing span for workflow execution (Requirement 13.4)
+        span = None
+        if self.tracer:
+            try:
+                span = self.tracer.trace_workflow(
+                    workflow_name="RAGQA",
+                    query=query,
+                    top_k=top_k
+                ).__enter__()
+            except Exception as e:
+                logger.warning(f"Failed to create workflow span: {e}")
+                span = None
 
         try:
-            # Step 1: Embed query
-            ctx = self._step_embed_query(ctx)
+            # Initialize context
+            ctx = RAGQAContext(query=query)
 
-            if ctx.query_embedding is None:
+            try:
+                # Step 1: Embed query
+                ctx = self._step_embed_query(ctx)
+
+                if ctx.query_embedding is None:
+                    return self._create_result(
+                        ctx,
+                        status="failed",
+                        error="Failed to generate query embedding",
+                        include_sources=include_sources,
+                    )
+
+                # Step 2: Retrieve documents
+                ctx = self._step_retrieve(ctx, top_k, threshold)
+
+                if not ctx.retrieved_docs:
+                    return self._create_result(
+                        ctx,
+                        status="partial",
+                        error="No relevant documents found",
+                        include_sources=include_sources,
+                    )
+
+                # Step 3: Generate answer
+                ctx = self._step_generate_answer(ctx)
+
+                status = "success" if ctx.answer else "partial"
+
+                return self._create_result(ctx, status=status, include_sources=include_sources)
+
+            except ResourceError as e:
+                logger.error("RAGQA workflow resource error", error=str(e), query=query[:50])
                 return self._create_result(
                     ctx,
                     status="failed",
-                    error="Failed to generate query embedding",
+                    error=f"Resource error: {str(e)}",
                     include_sources=include_sources,
                 )
-
-            # Step 2: Retrieve documents
-            ctx = self._step_retrieve(ctx, top_k, threshold)
-
-            if not ctx.retrieved_docs:
+            except Exception as e:
+                logger.error("RAGQA workflow failed", error=str(e), query=query[:50])
                 return self._create_result(
-                    ctx,
-                    status="partial",
-                    error="No relevant documents found",
-                    include_sources=include_sources,
+                    ctx, status="failed", error=str(e), include_sources=include_sources
                 )
-
-            # Step 3: Generate answer
-            ctx = self._step_generate_answer(ctx)
-
-            status = "success" if ctx.answer else "partial"
-
-            return self._create_result(ctx, status=status, include_sources=include_sources)
-
-        except ResourceError as e:
-            logger.error("RAGQA workflow resource error", error=str(e), query=query[:50])
-            return self._create_result(
-                ctx,
-                status="failed",
-                error=f"Resource error: {str(e)}",
-                include_sources=include_sources,
-            )
-        except Exception as e:
-            logger.error("RAGQA workflow failed", error=str(e), query=query[:50])
-            return self._create_result(
-                ctx, status="failed", error=str(e), include_sources=include_sources
-            )
+        finally:
+            # Close span if it was created
+            if span:
+                try:
+                    span.__exit__(None, None, None)
+                except Exception as e:
+                    logger.warning(f"Failed to close workflow span: {e}")
 
     def _step_embed_query(self, ctx: RAGQAContext) -> RAGQAContext:
         """

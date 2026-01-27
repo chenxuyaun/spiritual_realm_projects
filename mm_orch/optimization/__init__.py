@@ -42,6 +42,15 @@ from mm_orch.optimization.server import (
     HealthStatus,
     ReadinessStatus,
 )
+from mm_orch.optimization.gpu_utils import (
+    GPUManager,
+    GPUInfo,
+    get_gpu_manager,
+)
+from mm_orch.optimization.gpu_monitoring import (
+    GPUMonitor,
+    create_gpu_monitor,
+)
 
 __all__ = [
     # Configuration
@@ -76,4 +85,11 @@ __all__ = [
     "ServerStatus",
     "HealthStatus",
     "ReadinessStatus",
+    # GPU Utilities
+    "GPUManager",
+    "GPUInfo",
+    "get_gpu_manager",
+    # GPU Monitoring
+    "GPUMonitor",
+    "create_gpu_monitor",
 ]

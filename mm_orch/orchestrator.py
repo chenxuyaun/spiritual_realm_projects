@@ -33,6 +33,22 @@ from mm_orch.router import Router, get_router
 from mm_orch.logger import get_logger
 from mm_orch.exceptions import ValidationError, WorkflowError, ResourceError, OrchestrationError
 
+# Optional monitoring support
+try:
+    from mm_orch.monitoring.prometheus_exporter import PrometheusExporter
+    from mm_orch.monitoring.otel_tracer import OTelTracer
+    from mm_orch.monitoring.performance_monitor import PerformanceMonitor
+    from mm_orch.monitoring.anomaly_detector import AnomalyDetector
+    from mm_orch.monitoring.config import AnomalyConfig
+    MONITORING_AVAILABLE = True
+except ImportError:
+    MONITORING_AVAILABLE = False
+    PrometheusExporter = None
+    OTelTracer = None
+    PerformanceMonitor = None
+    AnomalyDetector = None
+    AnomalyConfig = None
+
 
 logger = get_logger(__name__)
 
@@ -84,6 +100,9 @@ class WorkflowOrchestrator:
         consciousness: Optional[ConsciousnessCore] = None,
         model_manager: Optional[Any] = None,
         auto_register_workflows: bool = True,
+        enable_monitoring: bool = False,
+        prometheus_port: int = 9090,
+        otel_endpoint: Optional[str] = None,
     ):
         """
         初始化工作流编排器
@@ -93,10 +112,28 @@ class WorkflowOrchestrator:
             consciousness: 意识核心实例
             model_manager: 模型管理器实例
             auto_register_workflows: 是否自动注册默认工作流
+            enable_monitoring: Whether to enable monitoring features (Requirement 13.1, 13.4)
+            prometheus_port: Port for Prometheus metrics endpoint
+            otel_endpoint: OpenTelemetry endpoint URL
         """
         self.router = router or get_router()
         self.consciousness = consciousness or get_consciousness()
         self.model_manager = model_manager
+
+        # Initialize monitoring components (Requirement 13.1, 13.4)
+        self.enable_monitoring = enable_monitoring and MONITORING_AVAILABLE
+        self.prometheus_exporter = None
+        self.otel_tracer = None
+        self.performance_monitor = None
+        self.anomaly_detector = None
+        
+        if self.enable_monitoring:
+            self._initialize_monitoring(prometheus_port, otel_endpoint)
+        elif enable_monitoring and not MONITORING_AVAILABLE:
+            logger.warning(
+                "Monitoring requested but monitoring modules not available. "
+                "System will function without monitoring."
+            )
 
         # 工作流注册表
         self._workflows: Dict[WorkflowType, BaseWorkflow] = {}
@@ -115,21 +152,96 @@ class WorkflowOrchestrator:
             "WorkflowOrchestrator initialized",
             num_workflows=len(self._workflows),
             has_consciousness=self.consciousness is not None,
+            monitoring_enabled=self.enable_monitoring,
         )
+    
+    def _initialize_monitoring(self, prometheus_port: int, otel_endpoint: Optional[str]):
+        """
+        Initialize monitoring components.
+        
+        Args:
+            prometheus_port: Port for Prometheus metrics endpoint
+            otel_endpoint: OpenTelemetry endpoint URL
+            
+        Requirement 13.1, 13.4: Initialize monitoring components
+        """
+        try:
+            # Initialize Prometheus exporter
+            self.prometheus_exporter = PrometheusExporter(
+                port=prometheus_port,
+                enabled=True
+            )
+            self.prometheus_exporter.start_server()
+            logger.info(f"Prometheus exporter initialized on port {prometheus_port}")
+            
+            # Initialize OpenTelemetry tracer
+            self.otel_tracer = OTelTracer(
+                service_name="muai-orchestration",
+                endpoint=otel_endpoint,
+                enabled=True
+            )
+            logger.info("OpenTelemetry tracer initialized")
+            
+            # Initialize performance monitor
+            self.performance_monitor = PerformanceMonitor(
+                max_history_seconds=3600,
+                resource_sample_interval=10
+            )
+            logger.info("Performance monitor initialized")
+            
+            # Initialize anomaly detector
+            anomaly_config = AnomalyConfig(
+                enabled=True,
+                latency_threshold_ms=1000.0,
+                error_rate_threshold=0.05,
+                memory_threshold_percent=90.0,
+                throughput_threshold_rps=1.0,
+                alert_destinations=["log"],
+                alert_rate_limit_seconds=300
+            )
+            self.anomaly_detector = AnomalyDetector(
+                config=anomaly_config,
+                performance_monitor=self.performance_monitor
+            )
+            logger.info("Anomaly detector initialized")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize monitoring: {e}")
+            # Disable monitoring on initialization failure (graceful degradation)
+            self.enable_monitoring = False
+            self.prometheus_exporter = None
+            self.otel_tracer = None
+            self.performance_monitor = None
+            self.anomaly_detector = None
 
     def _register_default_workflows(self) -> None:
         """注册默认工作流"""
         # SearchQA工作流
-        self.register_workflow(SearchQAWorkflow(model_manager=self.model_manager))
+        self.register_workflow(
+            SearchQAWorkflow(
+                model_manager=self.model_manager,
+                tracer=self.otel_tracer if self.enable_monitoring else None
+            )
+        )
 
         # LessonPack工作流
         self.register_workflow(LessonPackWorkflow(model_manager=self.model_manager))
 
         # ChatGenerate工作流
-        self.register_workflow(ChatGenerateWorkflow(model_manager=self.model_manager))
+        self.register_workflow(
+            ChatGenerateWorkflow(
+                model_manager=self.model_manager,
+                tracer=self.otel_tracer if self.enable_monitoring else None
+            )
+        )
 
         # RAGQA工作流
-        self.register_workflow(RAGQAWorkflow(model_manager=self.model_manager))
+        self.register_workflow(
+            RAGQAWorkflow(
+                model_manager=self.model_manager,
+                tracer=self.otel_tracer if self.enable_monitoring else None
+            )
+        )
 
         # SelfAskSearchQA工作流
         self.register_workflow(SelfAskSearchQAWorkflow(model_manager=self.model_manager))
@@ -214,6 +326,19 @@ class WorkflowOrchestrator:
             request=UserRequest(query=parameters.get("query", "")), start_time=time.time()
         )
 
+        # Create tracing span for workflow execution (Requirement 13.4)
+        span = None
+        if self.enable_monitoring and self.otel_tracer:
+            try:
+                span = self.otel_tracer.trace_operation(
+                    operation_name=f"execute_workflow.{workflow_type.value}",
+                    workflow_type=workflow_type.value,
+                    parameters=list(parameters.keys())
+                ).__enter__()
+            except Exception as e:
+                logger.warning(f"Failed to create tracing span: {e}")
+                span = None
+
         try:
             # 获取工作流
             workflow = self._workflows.get(workflow_type)
@@ -244,6 +369,20 @@ class WorkflowOrchestrator:
 
             # 验证结果结构 (属性4)
             result = self._validate_and_enhance_result(result, workflow_type, ctx)
+
+            # Record performance metrics (Requirement 13.4)
+            if self.enable_monitoring and self.performance_monitor:
+                try:
+                    self.performance_monitor.record_latency(
+                        operation=f"workflow.{workflow_type.value}",
+                        latency_ms=ctx.execution_time * 1000,
+                        metadata={
+                            "status": result.status,
+                            "workflow_type": workflow_type.value
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to record performance metrics: {e}")
 
             # 通知意识核心任务完成
             self._notify_task_complete(workflow_type, result)
@@ -292,6 +431,13 @@ class WorkflowOrchestrator:
                 workflow_type=workflow_type,
                 ctx=ctx,
             )
+        finally:
+            # Close span if it was created
+            if span:
+                try:
+                    span.__exit__(None, None, None)
+                except Exception as e:
+                    logger.warning(f"Failed to close tracing span: {e}")
 
     def process_request(self, request: UserRequest) -> WorkflowResult:
         """
@@ -622,7 +768,10 @@ def get_orchestrator(
     global _orchestrator_instance
     if _orchestrator_instance is None:
         _orchestrator_instance = WorkflowOrchestrator(
-            router=router, consciousness=consciousness, model_manager=model_manager
+            router=router, 
+            consciousness=consciousness, 
+            model_manager=model_manager,
+            enable_monitoring=False  # Default to disabled for backward compatibility
         )
     return _orchestrator_instance
 
@@ -638,6 +787,9 @@ def create_orchestrator(
     consciousness: Optional[ConsciousnessCore] = None,
     model_manager: Optional[Any] = None,
     auto_register_workflows: bool = True,
+    enable_monitoring: bool = False,
+    prometheus_port: int = 9090,
+    otel_endpoint: Optional[str] = None,
 ) -> WorkflowOrchestrator:
     """
     创建新的WorkflowOrchestrator实例
@@ -647,6 +799,9 @@ def create_orchestrator(
         consciousness: 意识核心实例
         model_manager: 模型管理器实例
         auto_register_workflows: 是否自动注册默认工作流
+        enable_monitoring: Whether to enable monitoring features
+        prometheus_port: Port for Prometheus metrics endpoint
+        otel_endpoint: OpenTelemetry endpoint URL
 
     Returns:
         新的WorkflowOrchestrator实例
@@ -656,4 +811,7 @@ def create_orchestrator(
         consciousness=consciousness,
         model_manager=model_manager,
         auto_register_workflows=auto_register_workflows,
+        enable_monitoring=enable_monitoring,
+        prometheus_port=prometheus_port,
+        otel_endpoint=otel_endpoint,
     )

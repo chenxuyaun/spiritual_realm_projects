@@ -13,6 +13,7 @@ import torch
 
 from mm_orch.logger import get_logger
 from mm_orch.optimization.config import DeepSpeedConfig
+from mm_orch.optimization.gpu_utils import get_gpu_manager
 
 logger = get_logger(__name__)
 
@@ -50,6 +51,9 @@ class DeepSpeedEngine:
         self._model = None
         self._loaded_model: Optional[str] = None
         self._tokenizer = None
+        self._gpu_manager = get_gpu_manager()
+        self._allocated_gpus: Optional[List[int]] = None
+        self._pipeline_allocation: Optional[List[List[int]]] = None
         
         logger.info(
             f"DeepSpeedEngine initialized with config: "
@@ -100,6 +104,10 @@ class DeepSpeedEngine:
         """
         Load model with DeepSpeed optimizations and parallelism.
         
+        Automatically detects and allocates GPUs for tensor and pipeline parallelism.
+        Pipeline parallelism distributes model layers across multiple GPUs for
+        models that don't fit on a single GPU.
+        
         Args:
             model_name: HuggingFace model name or path to load
             tensor_parallel: Override config tensor parallelism (optional)
@@ -114,9 +122,12 @@ class DeepSpeedEngine:
         
         Example:
             >>> engine = DeepSpeedEngine(DeepSpeedConfig())
+            >>> # Load with tensor parallelism only
             >>> success = engine.load_model("qwen-chat", tensor_parallel=2)
-            >>> if success:
-            ...     print("Model loaded successfully")
+            >>> # Load with pipeline parallelism
+            >>> success = engine.load_model("large-model", pipeline_parallel=2)
+            >>> # Load with both (hybrid parallelism)
+            >>> success = engine.load_model("huge-model", tensor_parallel=2, pipeline_parallel=2)
         """
         if not self.is_available():
             logger.error("Cannot load model: DeepSpeed is not available")
@@ -129,6 +140,36 @@ class DeepSpeedEngine:
             # Use provided parameters or fall back to config
             tp_size = tensor_parallel or self.config.tensor_parallel
             pp_size = pipeline_parallel or self.config.pipeline_parallel
+            
+            # Allocate GPUs if parallelism is requested
+            if tp_size > 1 or pp_size > 1:
+                try:
+                    gpu_ids, strategy = self._gpu_manager.allocate_gpus(
+                        tensor_parallel=tp_size,
+                        pipeline_parallel=pp_size
+                    )
+                    self._allocated_gpus = gpu_ids
+                    
+                    # For pipeline parallelism, balance load across stages
+                    if pp_size > 1:
+                        self._pipeline_allocation = self._gpu_manager.balance_load(
+                            tensor_parallel=tp_size,
+                            pipeline_parallel=pp_size
+                        )
+                        logger.info(
+                            f"Pipeline parallelism allocation: {self._pipeline_allocation}"
+                        )
+                    
+                    logger.info(
+                        f"Allocated {len(gpu_ids)} GPUs for {strategy}: {gpu_ids}"
+                    )
+                except RuntimeError as e:
+                    logger.error(f"GPU allocation failed: {e}")
+                    # Fall back to single GPU if allocation fails
+                    logger.warning("Falling back to single GPU mode")
+                    tp_size = 1
+                    pp_size = 1
+                    self._allocated_gpus = None
             
             logger.info(
                 f"Loading model {model_name} with DeepSpeed "
@@ -151,7 +192,7 @@ class DeepSpeedEngine:
                 torch_dtype=self._get_torch_dtype(),
             )
             
-            # Configure DeepSpeed inference
+            # Configure DeepSpeed inference with pipeline parallelism
             ds_config = {
                 "tensor_parallel": {
                     "tp_size": tp_size
@@ -160,7 +201,15 @@ class DeepSpeedEngine:
                 "replace_with_kernel_inject": self.config.replace_with_kernel_inject,
             }
             
+            # Add pipeline parallelism configuration if requested
+            if pp_size > 1:
+                ds_config["pipeline"] = {
+                    "stages": pp_size,
+                    "partition_method": "uniform",  # Distribute layers evenly
+                }
+            
             # Initialize DeepSpeed inference engine
+            # Note: DeepSpeed's init_inference handles both TP and PP
             self._model = deepspeed.init_inference(
                 model,
                 mp_size=tp_size,
@@ -191,6 +240,7 @@ class DeepSpeedEngine:
             self._model = None
             self._loaded_model = None
             self._tokenizer = None
+            self._allocated_gpus = None
             raise RuntimeError(f"DeepSpeed model loading failed: {e}") from e
             
         except Exception as e:
@@ -202,6 +252,7 @@ class DeepSpeedEngine:
             self._model = None
             self._loaded_model = None
             self._tokenizer = None
+            self._allocated_gpus = None
             return False
     
     def infer(
@@ -404,6 +455,8 @@ class DeepSpeedEngine:
             self._model = None
             self._loaded_model = None
             self._tokenizer = None
+            self._allocated_gpus = None
+            self._pipeline_allocation = None
             
             # Force garbage collection to free GPU memory
             import gc
@@ -427,6 +480,43 @@ class DeepSpeedEngine:
             'qwen-chat'
         """
         return self._loaded_model
+    
+    def get_allocated_gpus(self) -> Optional[List[int]]:
+        """
+        Get the list of GPUs allocated for parallelism.
+        
+        Returns:
+            List of GPU IDs if allocated, None otherwise
+        
+        Example:
+            >>> engine = DeepSpeedEngine(DeepSpeedConfig(tensor_parallel=2))
+            >>> engine.load_model("qwen-chat")
+            >>> print(engine.get_allocated_gpus())
+            [0, 1]
+        """
+        return self._allocated_gpus
+    
+    def get_pipeline_allocation(self) -> Optional[List[List[int]]]:
+        """
+        Get the pipeline parallelism allocation plan.
+        
+        Returns a list of GPU ID lists, one per pipeline stage.
+        Each stage contains the GPUs allocated for tensor parallelism
+        within that stage.
+        
+        Returns:
+            List of GPU ID lists per stage if pipeline parallelism is used,
+            None otherwise
+        
+        Example:
+            >>> engine = DeepSpeedEngine(DeepSpeedConfig(
+            ...     tensor_parallel=2, pipeline_parallel=2
+            ... ))
+            >>> engine.load_model("large-model")
+            >>> print(engine.get_pipeline_allocation())
+            [[0, 1], [2, 3]]  # Stage 0 uses GPUs 0-1, Stage 1 uses GPUs 2-3
+        """
+        return self._pipeline_allocation
     
     def _get_torch_dtype(self) -> torch.dtype:
         """
