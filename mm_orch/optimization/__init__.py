@@ -24,6 +24,17 @@ from mm_orch.optimization.manager import (
 )
 from mm_orch.optimization.vllm_engine import VLLMEngine
 from mm_orch.optimization.deepspeed_engine import DeepSpeedEngine
+from mm_orch.optimization.onnx_engine import ONNXEngine
+from mm_orch.optimization.batcher import (
+    DynamicBatcher,
+    InferenceRequest,
+    BatchedRequest,
+)
+from mm_orch.optimization.kv_cache_manager import (
+    KVCacheManager,
+    KVCache,
+    CacheStats,
+)
 
 __all__ = [
     # Configuration
@@ -43,4 +54,13 @@ __all__ = [
     # Engines
     "VLLMEngine",
     "DeepSpeedEngine",
+    "ONNXEngine",
+    # Batcher
+    "DynamicBatcher",
+    "InferenceRequest",
+    "BatchedRequest",
+    # KV Cache
+    "KVCacheManager",
+    "KVCache",
+    "CacheStats",
 ]

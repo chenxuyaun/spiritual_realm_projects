@@ -1,0 +1,6 @@
+Looking in indexes: https://pypi.tuna.tsinghua.edu.cn/simple
+Collecting prometheus-client
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/74/c3/24a2f845e3917201628ecaba4f18bab4d18a337834c1df2a159ee9d22a42/prometheus_client-0.24.1-py3-none-any.whl (64 kB)
+     ---------------------------------------- 64.1/64.1 kB 1.1 MB/s eta 0:00:00
+Installing collected packages: prometheus-client
+Successfully installed prometheus-client-0.24.1

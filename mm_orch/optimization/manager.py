@@ -15,6 +15,8 @@ from typing import Any, Dict, List, Optional
 
 from mm_orch.logger import get_logger
 from mm_orch.optimization.config import OptimizationConfig
+from mm_orch.monitoring.prometheus_exporter import PrometheusExporter
+from mm_orch.monitoring.otel_tracer import OTelTracer
 
 logger = get_logger(__name__)
 
@@ -172,16 +174,24 @@ class OptimizationManager:
         >>> print(f"Used engine: {result.engine_used}")
     """
     
-    def __init__(self, config: OptimizationConfig):
+    def __init__(self, config: OptimizationConfig, 
+                 prometheus_exporter: Optional[PrometheusExporter] = None,
+                 otel_tracer: Optional[OTelTracer] = None):
         """
         Initialize OptimizationManager with configuration.
         
         Args:
             config: Optimization configuration specifying engine settings
+            prometheus_exporter: Optional Prometheus metrics exporter
+            otel_tracer: Optional OpenTelemetry tracer
         """
         self.config = config
         self._engine_registry: Dict[str, EngineStatus] = {}
         self._engine_preference = config.engine_preference.copy()
+        
+        # Monitoring components (optional)
+        self._prometheus = prometheus_exporter
+        self._tracer = otel_tracer
         
         # Engine instances (lazy initialization)
         self._vllm_engine = None
@@ -454,61 +464,104 @@ class OptimizationManager:
             >>> print(result.engine_used)
             'vllm'
         """
-        # Determine engine order to try
-        if engine_preference and engine_preference in self._engine_preference:
-            # Try preferred engine first, then fallback chain
-            engines_to_try = [engine_preference] + [
-                e for e in self._engine_preference if e != engine_preference
+        # Create tracing span for inference operation
+        # Requirement 15.4: Handle monitoring failures gracefully
+        span = None
+        try:
+            if self._tracer:
+                span = self._tracer.trace_inference(
+                    model_name=model_name,
+                    engine=engine_preference or "auto"
+                ).__enter__()
+        except Exception as e:
+            # Monitoring failure should not block request
+            logger.warning(f"Failed to create tracing span: {e}")
+            span = None
+        
+        try:
+            # Determine engine order to try
+            if engine_preference and engine_preference in self._engine_preference:
+                # Try preferred engine first, then fallback chain
+                engines_to_try = [engine_preference] + [
+                    e for e in self._engine_preference if e != engine_preference
+                ]
+            else:
+                # Use default preference order
+                engines_to_try = self._engine_preference.copy()
+            
+            # Filter to only available engines
+            available_engines = [
+                engine for engine in engines_to_try
+                if self._engine_registry.get(engine, EngineStatus(engine, False, [])).available
             ]
-        else:
-            # Use default preference order
-            engines_to_try = self._engine_preference.copy()
-        
-        # Filter to only available engines
-        available_engines = [
-            engine for engine in engines_to_try
-            if self._engine_registry.get(engine, EngineStatus(engine, False, [])).available
-        ]
-        
-        if not available_engines:
-            raise RuntimeError(
-                f"No available engines for model {model_name}. "
-                f"All engines unavailable or disabled."
+            
+            if not available_engines:
+                error_msg = (
+                    f"No available engines for model {model_name}. "
+                    f"All engines unavailable or disabled."
+                )
+                # Record error in monitoring
+                self._record_monitoring_error(model_name, "no_engines_available")
+                raise RuntimeError(error_msg)
+            
+            # Try each engine in order
+            last_error = None
+            for engine_name in available_engines:
+                try:
+                    logger.debug(f"Attempting inference with engine: {engine_name}")
+                    result = self._infer_with_engine(engine_name, model_name, inputs)
+                    
+                    logger.info(
+                        f"Inference successful with {engine_name} "
+                        f"(latency: {result.latency_ms:.2f}ms)"
+                    )
+                    
+                    # Record successful inference metrics
+                    # Requirement 15.4: Handle monitoring failures gracefully
+                    self._record_inference_metrics(result)
+                    
+                    return result
+                    
+                except Exception as e:
+                    last_error = e
+                    logger.warning(
+                        f"Inference failed with {engine_name}: {e}",
+                        exc_info=True
+                    )
+                    
+                    # Record error in monitoring
+                    self._record_monitoring_error(model_name, engine_name, str(e))
+                    
+                    # Update engine status if it's a critical failure
+                    if self._is_critical_error(e):
+                        self._mark_engine_unavailable(engine_name, str(e))
+                    
+                    # Continue to next engine if fallback is enabled
+                    if not self.config.fallback_on_error:
+                        raise
+            
+            # All engines failed
+            error_msg = (
+                f"All engines failed for model {model_name}. "
+                f"Last error: {last_error}"
             )
-        
-        # Try each engine in order
-        last_error = None
-        for engine_name in available_engines:
-            try:
-                logger.debug(f"Attempting inference with engine: {engine_name}")
-                result = self._infer_with_engine(engine_name, model_name, inputs)
-                
-                logger.info(
-                    f"Inference successful with {engine_name} "
-                    f"(latency: {result.latency_ms:.2f}ms)"
-                )
-                return result
-                
-            except Exception as e:
-                last_error = e
-                logger.warning(
-                    f"Inference failed with {engine_name}: {e}",
-                    exc_info=True
-                )
-                
-                # Update engine status if it's a critical failure
-                if self._is_critical_error(e):
-                    self._mark_engine_unavailable(engine_name, str(e))
-                
-                # Continue to next engine if fallback is enabled
-                if not self.config.fallback_on_error:
-                    raise
-        
-        # All engines failed
-        raise RuntimeError(
-            f"All engines failed for model {model_name}. "
-            f"Last error: {last_error}"
-        )
+            raise RuntimeError(error_msg)
+            
+        except Exception as e:
+            # Record error in span if available
+            if span and self._tracer:
+                try:
+                    self._tracer._record_error_in_span(span, e)
+                except Exception as trace_error:
+                    logger.warning(f"Failed to record error in span: {trace_error}")
+            raise
+        finally:
+            # Close span if it was created
+            if span:
+                try:
+                    span.__exit__(None, None, None)
+                except Exception as e:
+                    logger.warning(f"Failed to close tracing span: {e}")
     
     def _infer_with_engine(
         self,
@@ -696,3 +749,78 @@ class OptimizationManager:
             logger.error(
                 f"Engine {engine_name} marked as unavailable: {error_message}"
             )
+    
+    def _record_inference_metrics(self, result: InferenceResult):
+        """
+        Record inference metrics to Prometheus.
+        
+        Handles monitoring failures gracefully per Requirement 15.4.
+        
+        Args:
+            result: InferenceResult containing metrics to record
+        """
+        if not self._prometheus:
+            return
+        
+        try:
+            # Record inference latency
+            self._prometheus.record_inference_latency(
+                model_name=result.metadata.get("model_name", "unknown"),
+                engine=result.engine_used,
+                latency_ms=result.latency_ms
+            )
+            
+            # Record batch size if available
+            if result.batch_size > 0:
+                self._prometheus.record_batch_size(
+                    model_name=result.metadata.get("model_name", "unknown"),
+                    batch_size=result.batch_size
+                )
+            
+            # Record cache hit rate if available
+            if result.cache_hit:
+                # Cache hit rate tracking would be done by KV cache manager
+                pass
+                
+        except Exception as e:
+            # Monitoring failure should not block request
+            # Requirement 15.4: Handle monitoring failures gracefully
+            logger.warning(f"Failed to record inference metrics: {e}")
+    
+    def _record_monitoring_error(
+        self,
+        model_name: str,
+        engine_or_error: str,
+        error_message: Optional[str] = None
+    ):
+        """
+        Record monitoring error to Prometheus.
+        
+        Handles monitoring failures gracefully per Requirement 15.4.
+        
+        Args:
+            model_name: Name of the model
+            engine_or_error: Engine name or error type
+            error_message: Optional error message
+        """
+        if not self._prometheus:
+            return
+        
+        try:
+            if error_message:
+                # This is an inference error
+                self._prometheus.record_inference_error(
+                    model_name=model_name,
+                    engine=engine_or_error,
+                    error_type=type(error_message).__name__ if hasattr(error_message, '__class__') else "unknown"
+                )
+            else:
+                # This is a general error
+                self._prometheus.record_error(
+                    component="optimization_manager",
+                    error_type=engine_or_error
+                )
+        except Exception as e:
+            # Monitoring failure should not block request
+            # Requirement 15.5: Tracing failures don't block requests
+            logger.warning(f"Failed to record monitoring error: {e}")

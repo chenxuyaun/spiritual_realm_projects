@@ -1,24 +1,31 @@
-"""
-Monitoring module for observability and performance tracking.
+"""Monitoring module for metrics and observability."""
 
-This module provides Prometheus metrics export, OpenTelemetry distributed
-tracing, performance monitoring, and anomaly detection capabilities.
-"""
-
-from mm_orch.monitoring.config import (
-    MonitoringConfig,
-    PrometheusConfig,
-    TracingConfig,
-    AnomalyConfig,
-    ServerConfig,
-    load_monitoring_config,
+from mm_orch.monitoring.prometheus_exporter import PrometheusExporter
+from mm_orch.monitoring.otel_tracer import OTelTracer
+from mm_orch.monitoring.performance_monitor import (
+    PerformanceMonitor,
+    LatencyRecord,
+    ResourceSnapshot,
+    PerformanceMetrics,
+    ResourceTrends
+)
+from mm_orch.monitoring.anomaly_detector import (
+    AnomalyDetector,
+    Alert,
+    AlertSeverity,
+    AlertType
 )
 
 __all__ = [
-    "MonitoringConfig",
-    "PrometheusConfig",
-    "TracingConfig",
-    "AnomalyConfig",
-    "ServerConfig",
-    "load_monitoring_config",
+    "PrometheusExporter",
+    "OTelTracer",
+    "PerformanceMonitor",
+    "LatencyRecord",
+    "ResourceSnapshot",
+    "PerformanceMetrics",
+    "ResourceTrends",
+    "AnomalyDetector",
+    "Alert",
+    "AlertSeverity",
+    "AlertType"
 ]

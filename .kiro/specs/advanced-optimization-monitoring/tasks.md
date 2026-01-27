@@ -82,65 +82,65 @@ Each task builds on previous work, with checkpoints to ensure stability before p
     - **Property 3: Engine configuration is applied correctly (DeepSpeed)**
     - **Validates: Requirements 2.1, 2.2, 2.3**
 
-- [-] 5. Implement ONNX Runtime wrapper
-  - [ ] 5.1 Create ONNXEngine class with model conversion
+- [x] 5. Implement ONNX Runtime wrapper
+  - [x] 5.1 Create ONNXEngine class with model conversion
     - Implement ONNX Runtime availability detection
     - Implement PyTorch to ONNX model conversion
     - Add conversion validation (compare outputs)
     - _Requirements: 3.1, 3.2, 3.4, 3.5, 15.3_
 
-  - [ ] 5.2 Implement ONNX inference with execution providers
+  - [x] 5.2 Implement ONNX inference with execution providers
     - Integrate ONNX Runtime inference API
     - Configure execution providers (CUDA, TensorRT, CPU)
     - Handle input/output tensor conversions
     - _Requirements: 3.3_
 
-  - [ ] 5.3 Write property tests for ONNX engine
+  - [x] 5.3 Write property tests for ONNX engine
     - **Property 4: ONNX conversion preserves model behavior**
     - **Property 3: Engine configuration is applied correctly (ONNX)**
     - **Validates: Requirements 3.2, 3.3**
 
-- [ ] 6. Checkpoint - Ensure optimization engines work with fallback
+- [x] 6. Checkpoint - Ensure optimization engines work with fallback
   - Verify all engines can be initialized (or gracefully fail)
   - Test fallback chain with simulated failures
   - Ensure existing ModelManager integration works
   - Ask the user if questions arise
 
-- [ ] 7. Implement Prometheus metrics exporter
-  - [ ] 7.1 Create PrometheusExporter class with HTTP server
+- [x] 7. Implement Prometheus metrics exporter
+  - [x] 7.1 Create PrometheusExporter class with HTTP server
     - Initialize Prometheus client library
     - Define metrics (latency, throughput, resources, etc.)
     - Implement HTTP server for metrics endpoint
     - _Requirements: 4.1, 4.7_
 
-  - [ ] 7.2 Implement metrics recording methods
+  - [x] 7.2 Implement metrics recording methods
     - Add record_inference_latency method
     - Add record_throughput method
     - Add record_resource_usage method
     - Add record_model_lifecycle method
     - _Requirements: 4.2, 4.3, 4.4, 4.5, 4.6_
 
-  - [ ] 7.3 Write property tests for metrics recording
+  - [x] 7.3 Write property tests for metrics recording
     - **Property 15: Inference metrics are recorded**
     - **Property 16: Model lifecycle events are recorded**
     - **Property 17: Resource metrics are continuously recorded**
     - **Property 18: Metrics are exposed in Prometheus format**
     - **Validates: Requirements 4.2, 4.3, 4.4, 4.5, 4.6, 4.7**
 
-- [ ] 8. Implement OpenTelemetry tracer
-  - [ ] 8.1 Create OTelTracer class with span management
+- [x] 8. Implement OpenTelemetry tracer
+  - [x] 8.1 Create OTelTracer class with span management
     - Initialize OpenTelemetry SDK
     - Configure exporter (OTLP, Jaeger, etc.)
     - Implement context manager for span creation
     - _Requirements: 5.1, 5.2, 5.3, 5.7_
 
-  - [ ] 8.2 Implement span recording and error handling
+  - [x] 8.2 Implement span recording and error handling
     - Add span duration and status recording
     - Add error recording in spans
     - Implement trace context propagation
     - _Requirements: 5.4, 5.5, 5.6_
 
-  - [ ] 8.3 Write property tests for tracing
+  - [x] 8.3 Write property tests for tracing
     - **Property 19: Root span is created for each request**
     - **Property 20: Child spans are created for workflow steps**
     - **Property 21: Inference spans include model metadata**
@@ -155,36 +155,36 @@ Each task builds on previous work, with checkpoints to ensure stability before p
   - Handle monitoring failures gracefully
   - _Requirements: 15.4, 15.5_
 
-- [ ] 9.1 Write property tests for monitoring integration
+- [x] 9.1 Write property tests for monitoring integration
   - **Property 59: Monitoring failures don't block requests**
   - **Validates: Requirements 15.4, 15.5**
 
-- [ ] 10. Implement Dynamic Batcher
-  - [ ] 10.1 Create DynamicBatcher class with request queue
+- [x] 10. Implement Dynamic Batcher
+  - [x] 10.1 Create DynamicBatcher class with request queue
     - Implement request queue with async support
     - Add request ID generation and tracking
     - Implement background batching loop
     - _Requirements: 6.1, 6.2, 6.3_
 
-  - [ ] 10.2 Implement batching logic and triggers
+  - [x] 10.2 Implement batching logic and triggers
     - Group compatible requests by model
     - Trigger on batch size threshold
     - Trigger on timeout
     - Apply padding for variable-length sequences
     - _Requirements: 6.2, 6.3, 6.5_
 
-  - [ ] 10.3 Implement adaptive batch sizing
+  - [x] 10.3 Implement adaptive batch sizing
     - Track latency and throughput metrics
     - Adjust batch size based on system load
     - Add configuration for adaptive batching
     - _Requirements: 6.4_
 
-  - [ ] 10.4 Add batching disable mode
+  - [x] 10.4 Add batching disable mode
     - Support configuration to disable batching
     - Process requests individually when disabled
     - _Requirements: 6.6_
 
-  - [ ] 10.5 Write property tests for batching
+  - [x] 10.5 Write property tests for batching
     - **Property 5: Compatible requests are batched together**
     - **Property 6: Batch processing is triggered by size or timeout**
     - **Property 7: Batch size adapts to system load**
@@ -192,21 +192,21 @@ Each task builds on previous work, with checkpoints to ensure stability before p
     - **Property 9: Batching can be disabled**
     - **Validates: Requirements 6.1, 6.2, 6.3, 6.4, 6.5, 6.6**
 
-- [ ] 11. Implement KV Cache Manager
-  - [ ] 11.1 Create KVCacheManager class with LRU eviction
+- [x] 11. Implement KV Cache Manager
+  - [x] 11.1 Create KVCacheManager class with LRU eviction
     - Implement cache storage with conversation isolation
     - Implement LRU eviction policy
     - Add memory tracking and limits
     - _Requirements: 7.1, 7.3, 7.4_
 
-  - [ ] 11.2 Implement cache operations
+  - [x] 11.2 Implement cache operations
     - Add get_cache method for retrieval
     - Add store_cache method for storage
     - Add cache hit rate tracking
     - Implement automatic cleanup on conversation end
     - _Requirements: 7.2, 7.5_
 
-  - [ ] 11.3 Write property tests for KV cache
+  - [x] 11.3 Write property tests for KV cache
     - **Property 10: Cache is enabled for compatible models**
     - **Property 11: Multi-turn conversations reuse cache**
     - **Property 12: LRU eviction occurs on memory overflow**
@@ -214,26 +214,26 @@ Each task builds on previous work, with checkpoints to ensure stability before p
     - **Property 14: Cache hit rates are tracked**
     - **Validates: Requirements 7.1, 7.2, 7.3, 7.4, 7.5**
 
-- [ ] 12. Checkpoint - Ensure batching and caching work correctly
+- [x] 12. Checkpoint - Ensure batching and caching work correctly
   - Test batching with various request patterns
   - Test cache hit rates in multi-turn scenarios
   - Verify adaptive batch sizing responds to load
   - Ask the user if questions arise
 
-- [ ] 13. Implement Performance Monitor
-  - [ ] 13.1 Create PerformanceMonitor class with statistics collection
+- [x] 13. Implement Performance Monitor
+  - [x] 13.1 Create PerformanceMonitor class with statistics collection
     - Implement latency recording with operation tracking
     - Implement throughput calculation over time windows
     - Implement resource utilization tracking
     - _Requirements: 9.1, 9.2, 9.3, 9.4_
 
-  - [ ] 13.2 Implement percentile calculations
+  - [x] 13.2 Implement percentile calculations
     - Add percentile computation (p50, p95, p99)
     - Implement sliding window for recent data
     - Add query API for performance data
     - _Requirements: 9.5, 9.6_
 
-  - [ ] 13.3 Write property tests for performance monitoring
+  - [x] 13.3 Write property tests for performance monitoring
     - **Property 29: Per-request latency is collected**
     - **Property 30: Per-model inference time is collected**
     - **Property 31: Throughput is calculated over time windows**
@@ -241,21 +241,21 @@ Each task builds on previous work, with checkpoints to ensure stability before p
     - **Property 33: Percentile latencies are computable**
     - **Validates: Requirements 9.1, 9.2, 9.3, 9.4, 9.5**
 
-- [ ] 14. Implement Anomaly Detector
-  - [ ] 14.1 Create AnomalyDetector class with threshold checking
+- [x] 14. Implement Anomaly Detector
+  - [x] 14.1 Create AnomalyDetector class with threshold checking
     - Implement latency threshold checking
     - Implement error rate threshold checking
     - Implement resource threshold checking
     - Implement throughput threshold checking
     - _Requirements: 10.1, 10.2, 10.3, 10.4_
 
-  - [ ] 14.2 Implement alert delivery and rate limiting
+  - [x] 14.2 Implement alert delivery and rate limiting
     - Add alert destinations (logs, webhooks, Alertmanager)
     - Implement alert rate limiting to prevent storms
     - Add alert severity levels
     - _Requirements: 10.5, 10.6_
 
-  - [ ] 14.3 Write property tests for anomaly detection
+  - [x] 14.3 Write property tests for anomaly detection
     - **Property 34: Latency threshold triggers alerts**
     - **Property 35: Error rate threshold triggers alerts**
     - **Property 36: Memory threshold triggers alerts**

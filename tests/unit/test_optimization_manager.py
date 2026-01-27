@@ -510,12 +510,13 @@ class TestEngineStatusTracking:
 class TestEngineSpecificInference:
     """Test engine-specific inference methods."""
     
-    def test_vllm_inference_not_implemented(self):
-        """Test vLLM inference raises NotImplementedError."""
+    def test_vllm_inference_requires_prompts(self):
+        """Test vLLM inference requires 'prompts' key in inputs."""
         config = OptimizationConfig()
         manager = OptimizationManager(config)
         
-        with pytest.raises(NotImplementedError, match="vLLM inference not yet implemented"):
+        # Should raise ValueError when 'prompts' key is missing
+        with pytest.raises(ValueError, match="vLLM inference requires 'prompts' key in inputs"):
             manager._infer_vllm("test-model", {"input": "test"})
     
     def test_deepspeed_inference_not_implemented(self):
