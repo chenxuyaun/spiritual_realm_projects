@@ -209,6 +209,38 @@ class TunerConfig:
 
 
 @dataclass
+class ServerConfig:
+    """
+    Configuration for inference server mode.
+    
+    Attributes:
+        enabled: Whether server mode is enabled
+        host: Server host address
+        port: Server port number
+        queue_capacity: Maximum number of requests in queue
+        preload_models: List of model names to pre-load at startup
+        graceful_shutdown_timeout: Timeout in seconds for graceful shutdown
+    """
+    enabled: bool = False
+    host: str = "0.0.0.0"
+    port: int = 8000
+    queue_capacity: int = 100
+    preload_models: List[str] = field(default_factory=list)
+    graceful_shutdown_timeout: int = 30
+    
+    def __post_init__(self):
+        """Validate configuration parameters."""
+        if self.port < 1 or self.port > 65535:
+            raise ValueError("port must be between 1 and 65535")
+        
+        if self.queue_capacity < 1:
+            raise ValueError("queue_capacity must be >= 1")
+        
+        if self.graceful_shutdown_timeout < 0:
+            raise ValueError("graceful_shutdown_timeout must be >= 0")
+
+
+@dataclass
 class OptimizationConfig:
     """
     Top-level configuration for optimization features.
@@ -221,6 +253,7 @@ class OptimizationConfig:
         batcher: Dynamic batching configuration
         cache: KV cache configuration
         tuner: Auto-tuning configuration
+        server: Inference server configuration
         engine_preference: Ordered list of preferred engines
         fallback_on_error: Enable fallback to next engine on error
     """
@@ -231,6 +264,7 @@ class OptimizationConfig:
     batcher: BatcherConfig = field(default_factory=BatcherConfig)
     cache: CacheConfig = field(default_factory=CacheConfig)
     tuner: TunerConfig = field(default_factory=TunerConfig)
+    server: ServerConfig = field(default_factory=ServerConfig)
     engine_preference: List[str] = field(
         default_factory=lambda: ["vllm", "deepspeed", "onnx", "pytorch"]
     )
@@ -311,6 +345,7 @@ def load_optimization_config(
         batcher_config = BatcherConfig(**opt_config.get("batcher", {}))
         cache_config = CacheConfig(**opt_config.get("cache", {}))
         tuner_config = TunerConfig(**opt_config.get("tuner", {}))
+        server_config = ServerConfig(**opt_config.get("server", {}))
         
         # Build top-level config
         config = OptimizationConfig(
@@ -321,6 +356,7 @@ def load_optimization_config(
             batcher=batcher_config,
             cache=cache_config,
             tuner=tuner_config,
+            server=server_config,
             engine_preference=opt_config.get(
                 "engine_preference", ["vllm", "deepspeed", "onnx", "pytorch"]
             ),
@@ -396,5 +432,18 @@ def _apply_env_overrides(config: Dict[str, Any]) -> Dict[str, Any]:
     tuner_config = config.setdefault("tuner", {})
     if "MUAI_OPT_TUNER_ENABLED" in os.environ:
         tuner_config["enabled"] = os.environ["MUAI_OPT_TUNER_ENABLED"].lower() in ("true", "1", "yes")
+    
+    # Server overrides
+    server_config = config.setdefault("server", {})
+    if "MUAI_OPT_SERVER_ENABLED" in os.environ:
+        server_config["enabled"] = os.environ["MUAI_OPT_SERVER_ENABLED"].lower() in ("true", "1", "yes")
+    if "MUAI_OPT_SERVER_HOST" in os.environ:
+        server_config["host"] = os.environ["MUAI_OPT_SERVER_HOST"]
+    if "MUAI_OPT_SERVER_PORT" in os.environ:
+        server_config["port"] = int(os.environ["MUAI_OPT_SERVER_PORT"])
+    if "MUAI_OPT_SERVER_QUEUE_CAPACITY" in os.environ:
+        server_config["queue_capacity"] = int(os.environ["MUAI_OPT_SERVER_QUEUE_CAPACITY"])
+    if "MUAI_OPT_SERVER_SHUTDOWN_TIMEOUT" in os.environ:
+        server_config["graceful_shutdown_timeout"] = int(os.environ["MUAI_OPT_SERVER_SHUTDOWN_TIMEOUT"])
     
     return config

@@ -265,25 +265,25 @@ Each task builds on previous work, with checkpoints to ensure stability before p
     - **Validates: Requirements 10.1, 10.2, 10.3, 10.4, 10.5, 10.6**
 
 - [ ] 15. Implement Inference Server
-  - [ ] 15.1 Create InferenceServer class with lifecycle management
+  - [x] 15.1 Create InferenceServer class with lifecycle management
     - Implement server initialization with model pre-loading
     - Implement request queue management
     - Add graceful shutdown with pending request completion
     - _Requirements: 8.1, 8.2, 8.4, 8.5_
 
-  - [ ] 15.2 Implement health and readiness endpoints
+  - [x] 15.2 Implement health and readiness endpoints
     - Add health_check method with status reporting
     - Add readiness_check method
     - Expose degradation status in health checks
     - _Requirements: 8.6, 15.6_
 
-  - [ ] 15.3 Implement queue capacity management
+  - [x] 15.3 Implement queue capacity management
     - Add queue size tracking
     - Reject requests when queue is full
     - Return appropriate error codes
     - _Requirements: 8.3_
 
-  - [ ] 15.4 Write property tests for server mode
+  - [x] 15.4 Write property tests for server mode
     - **Property 25: Models remain loaded in server mode**
     - **Property 26: Requests are queued in server mode**
     - **Property 27: Full queue rejects new requests**
@@ -292,25 +292,25 @@ Each task builds on previous work, with checkpoints to ensure stability before p
     - **Validates: Requirements 8.1, 8.2, 8.3, 8.5, 15.6**
 
 - [ ] 16. Implement Auto-Tuner
-  - [ ] 16.1 Create AutoTuner class with performance analysis
+  - [x] 16.1 Create AutoTuner class with performance analysis
     - Implement performance metrics analysis
     - Detect performance patterns (high latency, low throughput)
     - Generate tuning recommendations
     - _Requirements: 12.1, 12.2, 12.3_
 
-  - [ ] 16.2 Implement tuning application and logging
+  - [x] 16.2 Implement tuning application and logging
     - Apply tuning recommendations to system
     - Log all tuning decisions with rationale
     - Expose tuning decisions in metrics
     - Add rollback on performance degradation
     - _Requirements: 12.5_
 
-  - [ ] 16.3 Add auto-tuning disable mode
+  - [x] 16.3 Add auto-tuning disable mode
     - Support configuration to disable auto-tuning
     - Use static parameters when disabled
     - _Requirements: 12.6_
 
-  - [ ] 16.4 Write property tests for auto-tuning
+  - [-] 16.4 Write property tests for auto-tuning
     - **Property 45: Batch size adapts to load changes**
     - **Property 46: Timeout parameters adapt to load changes**
     - **Property 47: Cache size adapts to usage patterns**
