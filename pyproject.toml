@@ -51,6 +51,11 @@ addopts = [
     "--tb=short",
     "-v"
 ]
+markers = [
+    "property: Property-based tests using Hypothesis",
+    "unit: Unit tests for specific functionality",
+    "integration: Integration tests for component interactions",
+]
 
 [tool.coverage.run]
 source = ["mm_orch"]

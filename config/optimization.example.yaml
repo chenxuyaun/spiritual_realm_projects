@@ -1,0 +1,331 @@
+# =============================================================================
+# MuAI多模型编排系统 - 优化与监控配置示例
+# MuAI Multi-Model Orchestration System - Optimization & Monitoring Config
+# =============================================================================
+#
+# 使用说明 / Usage:
+#   1. 将此配置合并到 config/system.yaml 或创建单独的配置文件
+#   2. 根据您的环境和需求修改配置项
+#   3. 所有优化功能都是可选的，可以单独启用或禁用
+#
+# 配置优先级 / Configuration Priority:
+#   环境变量 > 配置文件 > 默认值
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 优化配置 / Optimization Configuration
+# -----------------------------------------------------------------------------
+optimization:
+  # 全局启用优化功能 / Enable optimization features globally
+  enabled: true
+  
+  # 引擎优先级顺序 / Engine preference order
+  # 系统会按此顺序尝试使用推理引擎
+  # 可选值: vllm, deepspeed, onnx, pytorch
+  engine_preference:
+    - vllm
+    - deepspeed
+    - onnx
+    - pytorch
+  
+  # 错误时自动降级 / Fallback on error
+  # 当首选引擎失败时，自动尝试下一个引擎
+  fallback_on_error: true
+  
+  # vLLM配置 / vLLM Configuration
+  # 高吞吐量LLM推理引擎，支持连续批处理和PagedAttention
+  vllm:
+    # 启用vLLM / Enable vLLM
+    enabled: true
+    
+    # 张量并行大小 / Tensor parallel size
+    # 使用多个GPU进行模型并行推理
+    # 建议值: 单GPU设置为1，多GPU根据显卡数量设置
+    tensor_parallel_size: 1
+    
+    # 数据类型 / Data type
+    # 可选值: auto, fp16, fp32, bf16
+    # auto: 自动选择最佳类型
+    # fp16: 半精度浮点（推荐，速度快且显存占用少）
+    # bf16: Brain Float 16（A100等新GPU支持）
+    dtype: auto
+    
+    # 最大模型长度 / Maximum model length
+    # null表示使用模型默认值
+    max_model_len: null
+    
+    # GPU显存利用率 / GPU memory utilization
+    # 范围: 0.0-1.0，推荐: 0.85-0.95
+    # 较高的值可以处理更大的批次，但可能导致OOM
+    gpu_memory_utilization: 0.9
+    
+    # CPU交换空间 / CPU swap space (GB)
+    # 当GPU显存不足时，使用CPU内存作为交换空间
+    swap_space: 4
+  
+  # DeepSpeed配置 / DeepSpeed Configuration
+  # 微软的深度学习优化库，支持大模型推理
+  deepspeed:
+    # 启用DeepSpeed / Enable DeepSpeed
+    enabled: true
+    
+    # 张量并行 / Tensor parallelism
+    # 跨GPU分布模型层
+    tensor_parallel: 1
+    
+    # 流水线并行 / Pipeline parallelism
+    # 跨GPU分布模型阶段
+    pipeline_parallel: 1
+    
+    # 数据类型 / Data type
+    # 可选值: fp16, fp32, bf16
+    dtype: fp16
+    
+    # 使用内核注入 / Use kernel injection
+    # 启用DeepSpeed优化内核以提升性能
+    replace_with_kernel_inject: true
+  
+  # ONNX Runtime配置 / ONNX Runtime Configuration
+  # 跨平台推理加速器
+  onnx:
+    # 启用ONNX Runtime / Enable ONNX Runtime
+    enabled: true
+    
+    # 执行提供者 / Execution providers
+    # 按优先级顺序列出，系统会使用第一个可用的
+    # 可选值: CUDAExecutionProvider, TensorrtExecutionProvider, 
+    #         CPUExecutionProvider, OpenVINOExecutionProvider
+    execution_providers:
+      - CUDAExecutionProvider
+      - CPUExecutionProvider
+    
+    # 优化级别 / Optimization level
+    # 可选值: none, basic, extended, all
+    # all: 启用所有优化（推荐）
+    optimization_level: all
+    
+    # 启用量化 / Enable quantization
+    # 在转换时应用动态量化以减少模型大小
+    enable_quantization: false
+  
+  # 动态批处理配置 / Dynamic Batching Configuration
+  # 将多个请求组合成批次以提高吞吐量
+  batcher:
+    # 启用动态批处理 / Enable dynamic batching
+    enabled: true
+    
+    # 最大批次大小 / Maximum batch size
+    # 每个批次的最大请求数
+    # 建议值: 16GB GPU设置为16-32，32GB GPU设置为32-64
+    max_batch_size: 32
+    
+    # 批次超时 / Batch timeout (milliseconds)
+    # 等待批次形成的最大时间
+    # 较小的值降低延迟，较大的值提高吞吐量
+    batch_timeout_ms: 50
+    
+    # 自适应批处理 / Adaptive batching
+    # 根据系统负载动态调整批次大小
+    adaptive_batching: true
+    
+    # 最小批次大小 / Minimum batch size
+    # 触发批处理的最小请求数
+    min_batch_size: 1
+  
+  # KV缓存配置 / KV Cache Configuration
+  # 缓存transformer模型的键值对以减少重复计算
+  cache:
+    # 启用KV缓存 / Enable KV cache
+    enabled: true
+    
+    # 最大缓存内存 / Maximum cache memory (MB)
+    # 缓存使用的最大内存量
+    # 建议值: GPU显存的10-20%
+    max_memory_mb: 4096
+    
+    # 驱逐策略 / Eviction policy
+    # 可选值: lru (最近最少使用), fifo (先进先出)
+    eviction_policy: lru
+  
+  # 自动调优配置 / Auto-tuning Configuration
+  # 根据工作负载自动调整性能参数
+  tuner:
+    # 启用自动调优 / Enable auto-tuning
+    # 注意: 生产环境建议先在测试环境验证后再启用
+    enabled: false
+    
+    # 观察窗口 / Observation window (seconds)
+    # 收集性能数据的时间窗口
+    observation_window_seconds: 300
+    
+    # 调优间隔 / Tuning interval (seconds)
+    # 执行调优调整的间隔
+    tuning_interval_seconds: 60
+    
+    # 启用批次大小调优 / Enable batch size tuning
+    enable_batch_size_tuning: true
+    
+    # 启用超时调优 / Enable timeout tuning
+    enable_timeout_tuning: true
+    
+    # 启用缓存大小调优 / Enable cache size tuning
+    enable_cache_size_tuning: true
+
+# -----------------------------------------------------------------------------
+# 监控配置 / Monitoring Configuration
+# -----------------------------------------------------------------------------
+monitoring:
+  # 全局启用监控功能 / Enable monitoring features globally
+  enabled: true
+  
+  # 指标收集间隔 / Metrics collection interval (seconds)
+  collection_interval_seconds: 60
+  
+  # 保留历史指标数量 / Maximum metrics history
+  max_metrics_history: 1000
+  
+  # Prometheus配置 / Prometheus Configuration
+  # 导出性能指标供Prometheus抓取
+  prometheus:
+    # 启用Prometheus导出 / Enable Prometheus export
+    enabled: true
+    
+    # 监听端口 / Port
+    # Prometheus抓取指标的HTTP端口
+    port: 9090
+    
+    # 监听地址 / Host
+    # 0.0.0.0 表示监听所有网络接口
+    host: "0.0.0.0"
+    
+    # 指标路径 / Metrics path
+    # HTTP端点路径
+    path: "/metrics"
+  
+  # OpenTelemetry追踪配置 / OpenTelemetry Tracing Configuration
+  # 分布式追踪用于性能分析
+  tracing:
+    # 启用分布式追踪 / Enable distributed tracing
+    enabled: true
+    
+    # 收集器端点 / Collector endpoint
+    # OpenTelemetry收集器的OTLP端点
+    endpoint: "http://localhost:4317"
+    
+    # 采样率 / Sample rate
+    # 范围: 0.0-1.0
+    # 1.0表示追踪所有请求，0.1表示追踪10%的请求
+    sample_rate: 1.0
+    
+    # 服务名称 / Service name
+    # 在追踪系统中标识此服务
+    service_name: "muai-orchestration"
+    
+    # 导出超时 / Export timeout (milliseconds)
+    export_timeout_ms: 30000
+  
+  # 异常检测配置 / Anomaly Detection Configuration
+  # 检测性能异常并触发告警
+  anomaly:
+    # 启用异常检测 / Enable anomaly detection
+    enabled: true
+    
+    # 延迟阈值 / Latency threshold (milliseconds)
+    # 超过此值触发延迟告警
+    latency_threshold_ms: 1000.0
+    
+    # 错误率阈值 / Error rate threshold
+    # 范围: 0.0-1.0
+    # 超过此值触发错误率告警
+    error_rate_threshold: 0.05
+    
+    # 内存阈值 / Memory threshold (percent)
+    # 范围: 0-100
+    # 超过此值触发内存告警
+    memory_threshold_percent: 90.0
+    
+    # 吞吐量阈值 / Throughput threshold (requests/second)
+    # 低于此值触发吞吐量告警
+    throughput_threshold_rps: 1.0
+    
+    # 告警速率限制 / Alert rate limit (seconds)
+    # 同类型告警之间的最小间隔，防止告警风暴
+    alert_rate_limit_seconds: 300
+    
+    # 告警目标 / Alert destinations
+    # 可选值: log (日志), webhook (Webhook), alertmanager (Prometheus Alertmanager)
+    alert_destinations:
+      - log
+    
+    # Webhook URL / Webhook URL
+    # 当alert_destinations包含webhook时必须设置
+    webhook_url: null
+  
+  # 推理服务器配置 / Inference Server Configuration
+  # 长期运行的服务器模式，用于生产部署
+  server:
+    # 启用服务器模式 / Enable server mode
+    enabled: false
+    
+    # 监听地址 / Host
+    host: "0.0.0.0"
+    
+    # 监听端口 / Port
+    port: 8000
+    
+    # 请求队列容量 / Queue capacity
+    # 最大排队请求数，超过此值将拒绝新请求
+    queue_capacity: 100
+    
+    # 预加载模型 / Preload models
+    # 启动时预加载的模型列表
+    preload_models:
+      - qwen_chat
+      - t5_summarizer
+    
+    # 优雅关闭超时 / Graceful shutdown timeout (seconds)
+    # 关闭前等待待处理请求完成的最大时间
+    graceful_shutdown_timeout: 30
+    
+    # 健康检查路径 / Health check path
+    health_check_path: "/health"
+    
+    # 就绪检查路径 / Readiness check path
+    readiness_check_path: "/ready"
+
+# =============================================================================
+# 环境变量覆盖 / Environment Variable Overrides
+# =============================================================================
+# 优化配置环境变量 / Optimization Environment Variables:
+#
+# MUAI_OPT_ENABLED                - 覆盖 optimization.enabled
+# MUAI_OPT_VLLM_ENABLED           - 覆盖 optimization.vllm.enabled
+# MUAI_OPT_VLLM_TENSOR_PARALLEL   - 覆盖 optimization.vllm.tensor_parallel_size
+# MUAI_OPT_VLLM_DTYPE             - 覆盖 optimization.vllm.dtype
+# MUAI_OPT_VLLM_GPU_MEMORY        - 覆盖 optimization.vllm.gpu_memory_utilization
+# MUAI_OPT_DEEPSPEED_ENABLED      - 覆盖 optimization.deepspeed.enabled
+# MUAI_OPT_ONNX_ENABLED           - 覆盖 optimization.onnx.enabled
+# MUAI_OPT_BATCHER_ENABLED        - 覆盖 optimization.batcher.enabled
+# MUAI_OPT_BATCHER_MAX_SIZE       - 覆盖 optimization.batcher.max_batch_size
+# MUAI_OPT_BATCHER_TIMEOUT        - 覆盖 optimization.batcher.batch_timeout_ms
+# MUAI_OPT_CACHE_ENABLED          - 覆盖 optimization.cache.enabled
+# MUAI_OPT_CACHE_MAX_MEMORY       - 覆盖 optimization.cache.max_memory_mb
+# MUAI_OPT_TUNER_ENABLED          - 覆盖 optimization.tuner.enabled
+#
+# 监控配置环境变量 / Monitoring Environment Variables:
+#
+# MUAI_MON_ENABLED                      - 覆盖 monitoring.enabled
+# MUAI_MON_PROMETHEUS_ENABLED           - 覆盖 monitoring.prometheus.enabled
+# MUAI_MON_PROMETHEUS_PORT              - 覆盖 monitoring.prometheus.port
+# MUAI_MON_TRACING_ENABLED              - 覆盖 monitoring.tracing.enabled
+# MUAI_MON_TRACING_ENDPOINT             - 覆盖 monitoring.tracing.endpoint
+# MUAI_MON_TRACING_SAMPLE_RATE          - 覆盖 monitoring.tracing.sample_rate
+# MUAI_MON_ANOMALY_ENABLED              - 覆盖 monitoring.anomaly.enabled
+# MUAI_MON_ANOMALY_LATENCY_THRESHOLD    - 覆盖 monitoring.anomaly.latency_threshold_ms
+# MUAI_MON_SERVER_ENABLED               - 覆盖 monitoring.server.enabled
+# MUAI_MON_SERVER_PORT                  - 覆盖 monitoring.server.port
+# MUAI_MON_SERVER_QUEUE_CAPACITY        - 覆盖 monitoring.server.queue_capacity
+# MUAI_MON_SERVER_PRELOAD_MODELS        - 覆盖 monitoring.server.preload_models (逗号分隔)
+#
+# =============================================================================
