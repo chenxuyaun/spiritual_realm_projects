@@ -1,0 +1,3 @@
+{"question": "What is Python?", "expected_workflow": "search_qa", "expected_fields": ["final_answer", "citations"], "quality_thresholds": {"min_answer_length": 50}}
+{"question": "Explain machine learning", "expected_workflow": "search_qa", "expected_fields": ["final_answer"], "quality_thresholds": {"min_answer_length": 100}}
+{"question": "How to use numpy arrays?", "expected_workflow": "search_qa_fast", "expected_fields": ["final_answer"], "quality_thresholds": {"min_answer_length": 50}}

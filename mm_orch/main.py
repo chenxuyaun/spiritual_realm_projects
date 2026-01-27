@@ -19,6 +19,13 @@ from mm_orch.router import get_router
 from mm_orch.consciousness.core import get_consciousness
 from mm_orch.logger import get_logger, configure_logger
 
+# Phase B integration with fallback
+try:
+    from mm_orch.orchestration.phase_b_orchestrator import get_phase_b_orchestrator
+    PHASE_B_AVAILABLE = True
+except ImportError:
+    PHASE_B_AVAILABLE = False
+
 
 logger = get_logger(__name__)
 
@@ -40,7 +47,8 @@ class CLI:
         orchestrator=None,
         verbose: bool = False,
         model: Optional[str] = None,
-        use_real_models: bool = False
+        use_real_models: bool = False,
+        use_phase_b: bool = False
     ):
         """
         初始化CLI
@@ -50,8 +58,19 @@ class CLI:
             verbose: 是否显示详细输出
             model: 指定使用的模型名称
             use_real_models: 是否使用真实模型
+            use_phase_b: 是否使用Phase B orchestrator (with fallback to Phase A)
         """
-        self.orchestrator = orchestrator or get_orchestrator()
+        # Use Phase B orchestrator if requested and available
+        if use_phase_b and PHASE_B_AVAILABLE:
+            logger.info("Using Phase B orchestrator with Phase A fallback")
+            self.orchestrator = orchestrator or get_phase_b_orchestrator()
+            self.using_phase_b = True
+        else:
+            if use_phase_b and not PHASE_B_AVAILABLE:
+                logger.warning("Phase B requested but not available, using Phase A")
+            self.orchestrator = orchestrator or get_orchestrator()
+            self.using_phase_b = False
+        
         self.verbose = verbose
         self.model = model
         self.use_real_models = use_real_models
@@ -251,7 +270,11 @@ class CLI:
             return result
 
         if isinstance(result, dict):
-            # 处理教学包结果
+            # 处理结构化教学包结果
+            if "lesson_explain_structured" in result:
+                return self._format_structured_lesson(result["lesson_explain_structured"])
+            
+            # 处理传统教学包结果
             if "plan" in result and "explanation" in result:
                 parts = []
                 parts.append("=== 教学计划 ===")
@@ -282,6 +305,87 @@ class CLI:
             return str(result)
 
         return str(result)
+
+    def _format_structured_lesson(self, lesson_data: Dict[str, Any]) -> str:
+        """
+        Format structured lesson for CLI display.
+        
+        Args:
+            lesson_data: StructuredLesson JSON dictionary
+        
+        Returns:
+            Formatted string with clear sections, numbered examples, and bullet points
+        
+        Requirements:
+            - 20.3: List examples with numbering
+            - 20.4: Display key points as bullet points
+        """
+        from mm_orch.workflows.lesson_structure import StructuredLesson
+        
+        try:
+            lesson = StructuredLesson.from_json(lesson_data)
+            
+            parts = []
+            
+            # Display topic and grade prominently
+            parts.append("=" * 60)
+            parts.append(f"主题: {lesson.topic}")
+            parts.append(f"年级/难度: {lesson.grade}")
+            parts.append("=" * 60)
+            parts.append("")
+            
+            # Display each section with clear headers
+            for i, section in enumerate(lesson.sections, 1):
+                parts.append(f"【第{i}部分：{section.name}】")
+                parts.append("-" * 60)
+                parts.append("")
+                
+                # Teacher content
+                parts.append("教师讲解:")
+                parts.append(section.teacher_say)
+                parts.append("")
+                
+                # Student responses (if present)
+                if section.student_may_say:
+                    parts.append("学生可能的回答:")
+                    parts.append(section.student_may_say)
+                    parts.append("")
+                
+                # Examples with numbering
+                if section.examples:
+                    parts.append("示例:")
+                    for j, example in enumerate(section.examples, 1):
+                        parts.append(f"  {j}. {example}")
+                    parts.append("")
+                
+                # Questions with numbering
+                if section.questions:
+                    parts.append("问题:")
+                    for j, question in enumerate(section.questions, 1):
+                        parts.append(f"  {j}. {question}")
+                    parts.append("")
+                
+                # Key points as bullet points
+                if section.key_points:
+                    parts.append("要点:")
+                    for point in section.key_points:
+                        parts.append(f"  • {point}")
+                    parts.append("")
+                
+                # Teaching tips (if present)
+                if section.tips:
+                    parts.append("教学提示:")
+                    parts.append(f"  💡 {section.tips}")
+                    parts.append("")
+            
+            parts.append("=" * 60)
+            
+            return "\n".join(parts)
+        
+        except Exception as e:
+            logger.error(f"Failed to format structured lesson: {e}")
+            # Fallback to simple dict display
+            return str(lesson_data)
 
     def _parse_workflow_type(self, workflow_name: str) -> Optional[WorkflowType]:
         """
@@ -610,6 +714,13 @@ def create_parser() -> argparse.ArgumentParser:
         help="使用真实模型进行推理（需要GPU或足够的内存）",
     )
 
+    # Phase B integration
+    parser.add_argument(
+        "--phase-b",
+        action="store_true",
+        help="使用Phase B orchestrator (graph-based execution with fallback to Phase A)",
+    )
+
     # 基准测试参数
     parser.add_argument(
         "--benchmark",
@@ -691,7 +802,8 @@ def main(args=None) -> int:
         cli = CLI(
             verbose=parsed_args.verbose,
             model=parsed_args.model,
-            use_real_models=parsed_args.real_models
+            use_real_models=parsed_args.real_models,
+            use_phase_b=parsed_args.phase_b
         )
 
         # 确定运行模式

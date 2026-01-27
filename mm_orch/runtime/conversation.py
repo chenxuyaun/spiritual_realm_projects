@@ -377,6 +377,20 @@ class ConversationManager:
         """获取消息数量"""
         return len(self.conversation)
     
+    def get_mode(self) -> str:
+        """
+        Get execution mode for routing.
+        
+        Returns:
+            "chat" for conversation mode, "default" for single-shot queries
+        
+        Requirements: 21.1
+        """
+        # If there are messages in the conversation, we're in chat mode
+        if len(self.conversation) > 0:
+            return "chat"
+        return "default"
+    
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
@@ -384,5 +398,6 @@ class ConversationManager:
             "max_history_tokens": self.max_history_tokens,
             "system_prompt": self.conversation.system_prompt,
             "messages": self.conversation.to_list(),
-            "message_count": len(self.conversation)
+            "message_count": len(self.conversation),
+            "mode": self.get_mode()
         }
