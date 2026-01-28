@@ -17,6 +17,12 @@ from mm_orch.optimization.config import (
     ServerConfig,
     load_optimization_config,
 )
+from mm_orch.optimization.config_manager import (
+    ConfigurationManager,
+    ConfigurationChange,
+    create_config_manager,
+    NON_CRITICAL_PARAMS,
+)
 from mm_orch.optimization.manager import (
     OptimizationManager,
     EngineStatus,
@@ -63,6 +69,11 @@ __all__ = [
     "TunerConfig",
     "ServerConfig",
     "load_optimization_config",
+    # Configuration Manager
+    "ConfigurationManager",
+    "ConfigurationChange",
+    "create_config_manager",
+    "NON_CRITICAL_PARAMS",
     # Manager
     "OptimizationManager",
     "EngineStatus",

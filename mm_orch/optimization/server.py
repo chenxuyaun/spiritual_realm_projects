@@ -611,3 +611,24 @@ class InferenceServer:
             queue_available=queue_available,
             engines_available=engines_count
         )
+    
+    def get_status(self) -> Dict[str, Any]:
+        """
+        Get current server status as a dictionary.
+        
+        This is a convenience method that returns health information
+        in dictionary format for easier testing and debugging.
+        
+        Returns:
+            Dictionary with server status information
+        """
+        health = self.health_check()
+        return {
+            "status": health.status,
+            "uptime_seconds": health.uptime_seconds,
+            "models_loaded": health.models_loaded,
+            "engines_available": health.engines_available,
+            "queue_size": health.queue_size,
+            "queue_capacity": health.queue_capacity,
+            "degradation_reasons": health.degradation_reasons
+        }

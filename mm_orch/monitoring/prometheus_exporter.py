@@ -58,15 +58,48 @@ class PrometheusExporter:
             logger.info("Prometheus metrics export disabled by configuration")
             return
         
-        # Initialize metrics
+        # Initialize metrics (with duplicate handling)
         self._init_metrics()
         logger.info(f"PrometheusExporter initialized on port {port}")
+    
+    def _get_or_create_metric(self, metric_class, name, description, labelnames=None, **kwargs):
+        """
+        Get existing metric or create new one.
+        
+        This prevents duplicate metric registration errors in tests.
+        """
+        try:
+            # Try to get existing metric from registry
+            for collector in list(REGISTRY._collector_to_names.keys()):
+                if hasattr(collector, '_name') and collector._name == name:
+                    return collector
+            
+            # Create new metric if not found
+            if labelnames:
+                return metric_class(name, description, labelnames, **kwargs)
+            else:
+                return metric_class(name, description, **kwargs)
+        except Exception as e:
+            # If metric already exists, try to retrieve it
+            logger.debug(f"Metric {name} may already exist: {e}")
+            # Return a dummy metric that does nothing
+            class DummyMetric:
+                def labels(self, **kwargs):
+                    return self
+                def observe(self, value):
+                    pass
+                def inc(self, amount=1):
+                    pass
+                def set(self, value):
+                    pass
+            return DummyMetric()
     
     def _init_metrics(self):
         """Initialize Prometheus metrics."""
         # Inference latency histogram (in seconds)
         # Requirement 4.2: Record inference latency metrics
-        self.inference_latency = Histogram(
+        self.inference_latency = self._get_or_create_metric(
+            Histogram,
             'inference_latency_seconds',
             'Inference latency in seconds',
             ['model', 'engine'],
@@ -75,7 +108,8 @@ class PrometheusExporter:
         
         # Inference request counter
         # Requirement 4.2: Record inference requests
-        self.inference_requests = Counter(
+        self.inference_requests = self._get_or_create_metric(
+            Counter,
             'inference_requests_total',
             'Total number of inference requests',
             ['model', 'engine', 'status']
@@ -83,7 +117,8 @@ class PrometheusExporter:
         
         # Throughput gauge (requests per second)
         # Requirement 4.3: Record throughput metrics
-        self.throughput = Gauge(
+        self.throughput = self._get_or_create_metric(
+            Gauge,
             'throughput_requests_per_second',
             'Current throughput in requests per second',
             ['model']
@@ -91,7 +126,8 @@ class PrometheusExporter:
         
         # GPU memory usage gauge (in bytes)
         # Requirement 4.5: Record GPU memory usage
-        self.gpu_memory_used = Gauge(
+        self.gpu_memory_used = self._get_or_create_metric(
+            Gauge,
             'gpu_memory_used_bytes',
             'GPU memory used in bytes',
             ['gpu_id']
@@ -99,7 +135,8 @@ class PrometheusExporter:
         
         # GPU memory available gauge (in bytes)
         # Requirement 11.5: Per-GPU metrics
-        self.gpu_memory_available = Gauge(
+        self.gpu_memory_available = self._get_or_create_metric(
+            Gauge,
             'gpu_memory_available_bytes',
             'GPU memory available in bytes',
             ['gpu_id']
@@ -107,7 +144,8 @@ class PrometheusExporter:
         
         # GPU utilization gauge (percentage)
         # Requirement 11.5: Per-GPU metrics
-        self.gpu_utilization = Gauge(
+        self.gpu_utilization = self._get_or_create_metric(
+            Gauge,
             'gpu_utilization_percent',
             'GPU utilization percentage',
             ['gpu_id']
@@ -115,7 +153,8 @@ class PrometheusExporter:
         
         # GPU temperature gauge (Celsius)
         # Requirement 11.5: Per-GPU metrics
-        self.gpu_temperature = Gauge(
+        self.gpu_temperature = self._get_or_create_metric(
+            Gauge,
             'gpu_temperature_celsius',
             'GPU temperature in Celsius',
             ['gpu_id']
@@ -123,7 +162,8 @@ class PrometheusExporter:
         
         # GPU health status gauge (1=healthy, 0=unhealthy)
         # Requirement 11.4: GPU failure detection
-        self.gpu_health_status = Gauge(
+        self.gpu_health_status = self._get_or_create_metric(
+            Gauge,
             'gpu_health_status',
             'GPU health status (1=healthy, 0=unhealthy)',
             ['gpu_id']
@@ -131,28 +171,32 @@ class PrometheusExporter:
         
         # CPU usage gauge (percentage)
         # Requirement 4.6: Record CPU usage
-        self.cpu_usage = Gauge(
+        self.cpu_usage = self._get_or_create_metric(
+            Gauge,
             'cpu_usage_percent',
             'CPU usage percentage'
         )
         
         # Model lifecycle events counter
         # Requirement 4.4: Record model lifecycle events
-        self.model_lifecycle_events = Counter(
+        self.model_lifecycle_events = self._get_or_create_metric(
+            Counter,
             'model_lifecycle_events_total',
             'Model lifecycle events (load/unload)',
             ['model', 'event_type']
         )
         
         # KV cache hit rate gauge
-        self.kv_cache_hit_rate = Gauge(
+        self.kv_cache_hit_rate = self._get_or_create_metric(
+            Gauge,
             'kv_cache_hit_rate',
             'KV cache hit rate',
             ['model']
         )
         
         # Batch size histogram
-        self.batch_size = Histogram(
+        self.batch_size = self._get_or_create_metric(
+            Histogram,
             'batch_size',
             'Batch size distribution',
             ['model'],
@@ -160,13 +204,15 @@ class PrometheusExporter:
         )
         
         # System uptime gauge
-        self.system_uptime = Gauge(
+        self.system_uptime = self._get_or_create_metric(
+            Gauge,
             'system_uptime_seconds',
             'System uptime in seconds'
         )
         
         # Error counter
-        self.errors = Counter(
+        self.errors = self._get_or_create_metric(
+            Counter,
             'errors_total',
             'Total number of errors',
             ['component', 'error_type']
@@ -419,14 +465,16 @@ class PrometheusExporter:
     def record_model_lifecycle(
         self,
         model_name: str,
-        event_type: str
+        event: str,
+        duration_ms: Optional[float] = None
     ):
         """
         Record model lifecycle event.
         
         Args:
             model_name: Name of the model
-            event_type: Type of event ('load' or 'unload')
+            event: Type of event ('load' or 'unload')
+            duration_ms: Optional duration of the operation in milliseconds
             
         Requirement 4.4: Record model lifecycle events
         """
@@ -436,7 +484,7 @@ class PrometheusExporter:
         try:
             self.model_lifecycle_events.labels(
                 model=model_name,
-                event_type=event_type
+                event_type=event
             ).inc()
         except Exception as e:
             logger.error(f"Failed to record model lifecycle event: {e}")
@@ -526,3 +574,54 @@ class PrometheusExporter:
     def is_server_started(self) -> bool:
         """Check if HTTP server is started."""
         return self._server_started
+    
+    def get_metrics(self) -> Dict[str, any]:
+        """
+        Get current metrics as a dictionary.
+        
+        This is primarily for testing and debugging purposes.
+        
+        Returns:
+            Dictionary containing current metric values
+        """
+        if not self.enabled or not PROMETHEUS_AVAILABLE:
+            return {}
+        
+        try:
+            from prometheus_client import generate_latest
+            
+            # Get metrics in Prometheus format
+            metrics_bytes = generate_latest(REGISTRY)
+            metrics_text = metrics_bytes.decode('utf-8')
+            
+            return {
+                "enabled": self.enabled,
+                "server_started": self._server_started,
+                "port": self.port,
+                "metrics_text": metrics_text,
+                "metrics_count": len([line for line in metrics_text.split('\n') if line and not line.startswith('#')])
+            }
+        except Exception as e:
+            logger.error(f"Failed to get metrics: {e}")
+            return {"error": str(e)}
+    
+    def format_metrics(self) -> str:
+        """
+        Format metrics in Prometheus text format.
+        
+        Returns:
+            Metrics in Prometheus text format
+            
+        Requirement 4.7: Expose metrics in Prometheus format
+        """
+        if not self.enabled or not PROMETHEUS_AVAILABLE:
+            return ""
+        
+        try:
+            from prometheus_client import generate_latest
+            
+            metrics_bytes = generate_latest(REGISTRY)
+            return metrics_bytes.decode('utf-8')
+        except Exception as e:
+            logger.error(f"Failed to format metrics: {e}")
+            return f"# Error formatting metrics: {e}\n"

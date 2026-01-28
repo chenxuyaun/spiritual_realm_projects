@@ -27,11 +27,13 @@ class PrometheusConfig:
         port: HTTP port for metrics endpoint
         host: Host address to bind metrics server
         path: URL path for metrics endpoint
+        start_server: Whether to start the HTTP server (set to False for testing)
     """
     enabled: bool = True
     port: int = 9090
     host: str = "0.0.0.0"
     path: str = "/metrics"
+    start_server: bool = True
     
     def __post_init__(self):
         """Validate configuration parameters."""

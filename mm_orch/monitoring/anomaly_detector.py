@@ -39,7 +39,7 @@ class AlertType(Enum):
     """Types of alerts."""
     LATENCY = "latency"
     ERROR_RATE = "error_rate"
-    MEMORY = "memory"
+    RESOURCE = "resource"  # Changed from MEMORY to RESOURCE
     THROUGHPUT = "throughput"
 
 
@@ -113,6 +113,10 @@ class AnomalyDetector:
         self._alert_history: List[Alert] = []
         self._history_lock = Lock()
         
+        # Request tracking for error rate calculation
+        self._request_history: List[Dict[str, Any]] = []
+        self._request_lock = Lock()
+        
         logger.info(
             f"AnomalyDetector initialized with thresholds: "
             f"latency={config.latency_threshold_ms}ms, "
@@ -174,7 +178,7 @@ class AnomalyDetector:
         """
         Check if error rate exceeds threshold.
         
-        Requires performance_monitor to be set.
+        Uses performance_monitor if available, otherwise uses internal request history.
         
         Args:
             component: Component name (None = all components)
@@ -183,20 +187,40 @@ class AnomalyDetector:
         Returns:
             Alert if threshold exceeded and not rate-limited, None otherwise
         """
-        if not self.config.enabled or not self.performance_monitor:
+        if not self.config.enabled:
             return None
         
-        # Get total requests and errors from performance monitor
-        throughput = self.performance_monitor.get_throughput(window_seconds)
-        error_rate_per_sec = self.performance_monitor.get_error_rate(component, window_seconds)
-        
-        if throughput == 0:
-            return None
-        
-        # Calculate error rate as fraction of requests
-        total_requests = throughput * window_seconds
-        total_errors = error_rate_per_sec * window_seconds
-        error_rate = total_errors / total_requests if total_requests > 0 else 0.0
+        # Try to get error rate from performance monitor first
+        if self.performance_monitor:
+            # Get total requests and errors from performance monitor
+            throughput = self.performance_monitor.get_throughput(window_seconds)
+            error_rate_per_sec = self.performance_monitor.get_error_rate(component, window_seconds)
+            
+            if throughput == 0:
+                return None
+            
+            # Calculate error rate as fraction of requests
+            total_requests = throughput * window_seconds
+            total_errors = error_rate_per_sec * window_seconds
+            error_rate = total_errors / total_requests if total_requests > 0 else 0.0
+        else:
+            # Fall back to internal request history
+            error_rate = self._calculate_error_rate_from_history(component, window_seconds)
+            
+            # Get request count from history
+            with self._request_lock:
+                cutoff_time = datetime.now() - timedelta(seconds=window_seconds)
+                recent_requests = [
+                    r for r in self._request_history
+                    if r["timestamp"] > cutoff_time
+                ]
+                if component:
+                    recent_requests = [
+                        r for r in recent_requests
+                        if r.get("component") == component
+                    ]
+                total_requests = len(recent_requests)
+                total_errors = sum(1 for r in recent_requests if not r["success"])
         
         if error_rate <= self.config.error_rate_threshold:
             return None
@@ -221,8 +245,8 @@ class AnomalyDetector:
                 "error_rate": error_rate,
                 "threshold": self.config.error_rate_threshold,
                 "window_seconds": window_seconds,
-                "total_requests": total_requests,
-                "total_errors": total_errors
+                "total_requests": total_requests if 'total_requests' in locals() else 0,
+                "total_errors": total_errors if 'total_errors' in locals() else 0
             }
         )
         
@@ -265,7 +289,7 @@ class AnomalyDetector:
         
         memory_type = "GPU memory" if gpu_memory_percent is not None else "Memory"
         alert = Alert(
-            alert_type=AlertType.MEMORY.value,
+            alert_type=AlertType.RESOURCE.value,  # Changed from MEMORY to RESOURCE
             severity=severity.value,
             message=f"{memory_type} threshold exceeded: {memory_to_check:.1f}% (threshold: {self.config.memory_threshold_percent}%)",
             timestamp=datetime.now(),
@@ -407,6 +431,72 @@ class AnomalyDetector:
             self._last_alert_time[alert_key] = datetime.now()
             
             return alert
+    
+    def _record_request(self, success: bool = True, component: Optional[str] = None):
+        """
+        Record a request for error rate tracking.
+        
+        This is an internal method used to track request success/failure
+        for error rate calculation when performance_monitor is not available.
+        
+        Args:
+            success: Whether the request was successful
+            component: Optional component name
+        """
+        with self._request_lock:
+            self._request_history.append({
+                "timestamp": datetime.now(),
+                "success": success,
+                "component": component
+            })
+            
+            # Keep only last hour of history
+            cutoff_time = datetime.now() - timedelta(hours=1)
+            self._request_history = [
+                r for r in self._request_history
+                if r["timestamp"] > cutoff_time
+            ]
+    
+    def _calculate_error_rate_from_history(
+        self,
+        component: Optional[str] = None,
+        window_seconds: int = 60
+    ) -> float:
+        """
+        Calculate error rate from internal request history.
+        
+        Args:
+            component: Component name (None = all components)
+            window_seconds: Time window for rate calculation
+            
+        Returns:
+            Error rate as a fraction (0.0 to 1.0)
+        """
+        with self._request_lock:
+            cutoff_time = datetime.now() - timedelta(seconds=window_seconds)
+            
+            # Filter requests in time window
+            recent_requests = [
+                r for r in self._request_history
+                if r["timestamp"] > cutoff_time
+            ]
+            
+            # Filter by component if specified
+            if component:
+                recent_requests = [
+                    r for r in recent_requests
+                    if r.get("component") == component
+                ]
+            
+            if not recent_requests:
+                return 0.0
+            
+            # Calculate error rate
+            total_requests = len(recent_requests)
+            failed_requests = sum(1 for r in recent_requests if not r["success"])
+            
+            return failed_requests / total_requests if total_requests > 0 else 0.0
+
     
     def _log_alert(self, alert: Alert):
         """Log alert with structured data."""

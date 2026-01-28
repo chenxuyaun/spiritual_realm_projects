@@ -1,6 +1,7 @@
 """OpenTelemetry distributed tracing for request flow analysis."""
 
 import logging
+import threading
 from contextlib import contextmanager
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -8,10 +9,12 @@ import traceback
 
 try:
     from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace import TracerProvider, ReadableSpan
     from opentelemetry.sdk.trace.export import (
         BatchSpanProcessor,
         ConsoleSpanExporter,
+        SpanExporter,
+        SpanExportResult,
     )
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.resources import Resource
@@ -21,10 +24,69 @@ except ImportError:
     OTEL_AVAILABLE = False
     # Define dummy types for type hints when OpenTelemetry is not available
     Span = Any
+    ReadableSpan = Any
+    SpanExporter = Any
+    SpanExportResult = Any
 
 from mm_orch.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class InMemorySpanExporter:
+    """
+    In-memory span exporter for testing purposes.
+    
+    Stores spans in memory instead of exporting them to an external system.
+    """
+    
+    def __init__(self):
+        """Initialize the in-memory exporter."""
+        self._spans = []
+        self._lock = threading.Lock()
+    
+    def export(self, spans):
+        """
+        Export spans to memory.
+        
+        Args:
+            spans: Sequence of ReadableSpan objects
+            
+        Returns:
+            SpanExportResult.SUCCESS
+        """
+        if not OTEL_AVAILABLE:
+            return None
+        
+        with self._lock:
+            self._spans.extend(spans)
+        
+        # Import here to avoid issues when OTEL is not available
+        from opentelemetry.sdk.trace.export import SpanExportResult
+        return SpanExportResult.SUCCESS
+    
+    def shutdown(self):
+        """Shutdown the exporter."""
+        pass
+    
+    def force_flush(self, timeout_millis: int = 30000):
+        """Force flush any buffered spans."""
+        return True
+    
+    def get_finished_spans(self):
+        """
+        Get all finished spans stored in memory.
+        
+        Returns:
+            List of ReadableSpan objects
+        """
+        with self._lock:
+            return list(self._spans)
+    
+    def clear_spans(self):
+        """Clear all stored spans."""
+        with self._lock:
+            self._spans.clear()
 
 
 class OTelTracer:
@@ -38,8 +100,13 @@ class OTelTracer:
     Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7
     """
     
+    # Class-level shared memory exporter for testing
+    _shared_memory_exporter = None
+    _provider_initialized = False
+    
     def __init__(
         self,
+        config: Optional['TracingConfig'] = None,
         service_name: str = "muai-orchestration",
         endpoint: Optional[str] = None,
         enabled: bool = True,
@@ -50,19 +117,30 @@ class OTelTracer:
         Initialize OpenTelemetry tracer.
         
         Args:
+            config: TracingConfig object (if provided, overrides other parameters)
             service_name: Name of the service for trace identification
             endpoint: OTLP endpoint URL (e.g., "http://localhost:4317")
+                     Use "memory://" for in-memory testing
             enabled: Whether tracing is enabled (default: True)
             sample_rate: Sampling rate for traces (0.0 to 1.0, default: 1.0)
             use_console_exporter: Use console exporter for debugging (default: False)
             
         Requirements: 5.1, 5.7
         """
-        self.service_name = service_name
-        self.endpoint = endpoint
-        self.enabled = enabled
-        self.sample_rate = sample_rate
+        # If config object provided, use its values
+        if config is not None:
+            self.service_name = config.service_name
+            self.endpoint = config.endpoint
+            self.enabled = config.enabled
+            self.sample_rate = config.sample_rate
+        else:
+            self.service_name = service_name
+            self.endpoint = endpoint
+            self.enabled = enabled
+            self.sample_rate = sample_rate
+        
         self._tracer = None
+        self._memory_exporter = None  # For testing
         
         if not OTEL_AVAILABLE:
             logger.warning(
@@ -80,8 +158,8 @@ class OTelTracer:
         # Initialize OpenTelemetry SDK
         self._init_tracer(use_console_exporter)
         logger.info(
-            f"OTelTracer initialized for service '{service_name}' "
-            f"with endpoint '{endpoint or 'console'}'"
+            f"OTelTracer initialized for service '{self.service_name}' "
+            f"with endpoint '{self.endpoint or 'console'}'"
         )
     
     def _init_tracer(self, use_console_exporter: bool = False):
@@ -91,6 +169,18 @@ class OTelTracer:
         Requirement 5.7: Configure exporter (OTLP, Jaeger, etc.)
         """
         try:
+            # Check if provider is already initialized
+            if OTelTracer._provider_initialized:
+                logger.info("Reusing existing TracerProvider")
+                self._tracer = trace.get_tracer(__name__)
+                
+                # Reuse shared memory exporter if available
+                if OTelTracer._shared_memory_exporter is not None:
+                    self._memory_exporter = OTelTracer._shared_memory_exporter
+                    logger.info("Reusing shared InMemorySpanExporter")
+                
+                return
+            
             # Create resource with service name
             resource = Resource.create({
                 "service.name": self.service_name,
@@ -101,7 +191,13 @@ class OTelTracer:
             provider = TracerProvider(resource=resource)
             
             # Configure exporter
-            if use_console_exporter:
+            if self.endpoint and self.endpoint.startswith("memory://"):
+                # In-memory exporter for testing
+                exporter = InMemorySpanExporter()
+                self._memory_exporter = exporter
+                OTelTracer._shared_memory_exporter = exporter  # Share across instances
+                logger.info("Using InMemorySpanExporter for testing")
+            elif use_console_exporter:
                 # Console exporter for debugging
                 exporter = ConsoleSpanExporter()
                 logger.info("Using ConsoleSpanExporter for tracing")
@@ -123,6 +219,7 @@ class OTelTracer:
             
             # Set global tracer provider
             trace.set_tracer_provider(provider)
+            OTelTracer._provider_initialized = True
             
             # Get tracer instance
             self._tracer = trace.get_tracer(__name__)
@@ -423,3 +520,73 @@ class OTelTracer:
                 logger.info("OpenTelemetry tracer shutdown successfully")
         except Exception as e:
             logger.error(f"Error shutting down tracer: {e}")
+    
+    @classmethod
+    def reset_for_testing(cls):
+        """
+        Reset class-level state for testing.
+        
+        This method should only be used in tests to reset the shared state
+        between test cases.
+        """
+        # Clear spans from memory exporter if it exists
+        if cls._shared_memory_exporter is not None:
+            try:
+                cls._shared_memory_exporter.clear_spans()
+            except Exception as e:
+                logger.warning(f"Error clearing spans during reset: {e}")
+        
+        # Reset class-level flags but keep the provider
+        # (OpenTelemetry doesn't allow overriding the provider once set)
+        # cls._provider_initialized = False  # Don't reset this
+        
+        if OTEL_AVAILABLE:
+            try:
+                # Force flush any pending spans
+                provider = trace.get_tracer_provider()
+                if hasattr(provider, 'force_flush'):
+                    provider.force_flush()
+            except Exception as e:
+                logger.warning(f"Error flushing spans during reset: {e}")
+    
+    def get_finished_spans(self):
+        """
+        Get finished spans for testing purposes.
+        
+        This method is primarily for testing and requires using an in-memory
+        span exporter. Returns an empty list if not available.
+        
+        Returns:
+            List of finished spans
+        """
+        if not self.enabled or not OTEL_AVAILABLE:
+            return []
+        
+        # If using memory exporter, get spans directly
+        if self._memory_exporter is not None:
+            # Force flush to ensure all spans are exported
+            try:
+                provider = trace.get_tracer_provider()
+                if hasattr(provider, 'force_flush'):
+                    provider.force_flush()
+            except Exception as e:
+                logger.warning(f"Failed to force flush spans: {e}")
+            
+            return self._memory_exporter.get_finished_spans()
+        
+        # Fallback: try to get spans from provider (may not work with all exporters)
+        try:
+            provider = trace.get_tracer_provider()
+            if hasattr(provider, '_active_span_processor'):
+                processor = provider._active_span_processor
+                if hasattr(processor, 'span_exporter'):
+                    exporter = processor.span_exporter
+                    if hasattr(exporter, 'get_finished_spans'):
+                        return exporter.get_finished_spans()
+            
+            # If we can't get spans from the exporter, return empty list
+            logger.warning("Cannot retrieve finished spans - not using in-memory exporter")
+            return []
+        except Exception as e:
+            logger.error(f"Error getting finished spans: {e}")
+            return []

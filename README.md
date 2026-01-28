@@ -64,6 +64,18 @@
 - 吞吐量测试
 - JSON/CSV报告生成
 
+### ⚡ 高级优化和监控
+- **推理引擎**: vLLM、DeepSpeed、ONNX Runtime集成
+- **动态批处理**: 自动请求批处理以提高吞吐量
+- **KV缓存**: Transformer键值对缓存优化
+- **Prometheus监控**: 性能指标导出
+- **OpenTelemetry追踪**: 分布式请求追踪
+- **异常检测**: 自动性能告警
+- **服务器模式**: 长期运行的推理服务器
+- **自动调优**: 基于工作负载的参数优化
+
+详细文档请参阅 [优化和监控文档](docs/optimization_README.md)
+
 ---
 
 ## 快速开始
@@ -469,6 +481,23 @@ api:
 | `MUAI_API_PORT` | api.port | API监听端口 |
 | `MUAI_API_KEY` | api.api_key | API密钥 |
 | `MUAI_ENABLE_AUTH` | api.enable_auth | 启用认证 |
+
+---
+
+## 文档
+
+### 核心文档
+- [API参考](docs/api_reference.md) - API接口文档
+- [意识系统指南](docs/consciousness_guide.md) - 意识模块使用指南
+- [基准测试指南](docs/benchmark_guide.md) - 性能测试指南
+
+### 优化和监控文档
+- [优化和监控概述](docs/optimization_README.md) - 功能概述和快速开始
+- [配置指南](docs/optimization_configuration_guide.md) - 详细配置参数说明
+- [配置示例](docs/optimization_configuration_examples.md) - 场景化配置示例
+- [迁移指南](docs/optimization_migration_guide.md) - 从现有系统迁移
+- [部署指南](docs/optimization_deployment_guide.md) - 生产环境部署
+- [快速参考](docs/optimization_quick_reference.md) - 常用配置和命令
 
 ---
 

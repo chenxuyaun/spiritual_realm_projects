@@ -55,6 +55,7 @@ markers = [
     "property: Property-based tests using Hypothesis",
     "unit: Unit tests for specific functionality",
     "integration: Integration tests for component interactions",
+    "slow: Slow-running tests that may take significant time",
 ]
 
 [tool.coverage.run]
