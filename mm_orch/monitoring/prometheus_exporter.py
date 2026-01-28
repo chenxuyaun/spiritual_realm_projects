@@ -33,18 +33,35 @@ class PrometheusExporter:
     Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7
     """
     
-    def __init__(self, port: int = 9090, enabled: bool = True):
+    def __init__(self, config_or_port=None, enabled: bool = True):
         """
         Initialize Prometheus exporter.
         
         Args:
-            port: HTTP port for metrics endpoint (default: 9090)
-            enabled: Whether metrics export is enabled (default: True)
+            config_or_port: Either a PrometheusConfig object or an integer port number
+            enabled: Whether metrics export is enabled (default: True, ignored if config provided)
         """
-        self.port = port
-        self.enabled = enabled
+        # Handle both PrometheusConfig and legacy port parameter
+        if config_or_port is None:
+            self.port = 9090
+            self.enabled = enabled
+            start_server = True
+        elif isinstance(config_or_port, int):
+            # Legacy: port number
+            self.port = config_or_port
+            self.enabled = enabled
+            start_server = True
+        else:
+            # New: PrometheusConfig object
+            config = config_or_port
+            self.port = config.port
+            self.enabled = config.enabled
+            start_server = config.start_server
+        
         self._server_started = False
         self._lock = threading.Lock()
+        self._degraded = False
+        self._degradation_reason = None
         
         if not PROMETHEUS_AVAILABLE:
             logger.warning(
@@ -60,7 +77,7 @@ class PrometheusExporter:
         
         # Initialize metrics (with duplicate handling)
         self._init_metrics()
-        logger.info(f"PrometheusExporter initialized on port {port}")
+        logger.info(f"PrometheusExporter initialized on port {config_or_port}")
     
     def _get_or_create_metric(self, metric_class, name, description, labelnames=None, **kwargs):
         """
@@ -625,3 +642,28 @@ class PrometheusExporter:
         except Exception as e:
             logger.error(f"Failed to format metrics: {e}")
             return f"# Error formatting metrics: {e}\n"
+    
+    def get_status(self) -> Dict[str, any]:
+        """
+        Get the current status of the Prometheus exporter.
+        
+        Returns:
+            Dictionary containing status information including:
+            - enabled: Whether metrics export is enabled
+            - server_started: Whether HTTP server is running
+            - port: HTTP port for metrics endpoint
+            - degraded: Whether the exporter is in degraded state
+            - degradation_reason: Reason for degradation (if degraded)
+        """
+        status = {
+            "enabled": self.enabled,
+            "server_started": self._server_started,
+            "port": self.port,
+            "degraded": self._degraded,
+        }
+        
+        if self._degraded and self._degradation_reason:
+            status["reason"] = self._degradation_reason
+            status["degradation_reason"] = self._degradation_reason
+        
+        return status
