@@ -149,7 +149,7 @@ Each task builds on previous work, with checkpoints to ensure stability before p
     - **Property 24: Trace context is propagated**
     - **Validates: Requirements 5.1, 5.2, 5.3, 5.4, 5.5, 5.6**
 
-- [ ] 9. Integrate monitoring into OptimizationManager
+- [x] 9. Integrate monitoring into OptimizationManager
   - Add metrics recording to infer() method
   - Add tracing spans for inference operations
   - Handle monitoring failures gracefully

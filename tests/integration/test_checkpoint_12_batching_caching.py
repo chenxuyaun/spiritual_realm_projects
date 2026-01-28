@@ -9,6 +9,7 @@ This checkpoint validates that:
 """
 
 import time
+import queue
 import pytest
 from mm_orch.optimization.batcher import DynamicBatcher
 from mm_orch.optimization.kv_cache_manager import KVCacheManager
@@ -23,7 +24,7 @@ class TestBatchingPatterns:
         config = BatcherConfig(
             enabled=True,
             max_batch_size=5,
-            batch_timeout_ms=50,  # Shorter timeout
+            batch_timeout_ms=100,  # Increased timeout for reliability
             adaptive_batching=False
         )
         batcher = DynamicBatcher(config)
@@ -40,28 +41,36 @@ class TestBatchingPatterns:
                 )
                 request_ids.append(req_id)
             
-            # Wait for processing (shorter wait)
-            time.sleep(0.2)
+            # Wait for processing (increased wait time)
+            time.sleep(0.5)
             
             # Verify: Requests should be processed
             processed_count = 0
+            failed_requests = []
+            
             for req_id in request_ids:
                 try:
-                    result = batcher.get_result(req_id, timeout=0.1)
+                    result = batcher.get_result(req_id, timeout=0.5)
                     processed_count += 1
                     assert result.request_id == req_id
-                except:
-                    pass  # Some may still be processing
+                except queue.Empty:
+                    failed_requests.append(req_id)
+                except Exception as e:
+                    failed_requests.append(req_id)
+                    print(f"Request {req_id} failed: {e}")
             
-            # At least some should be processed
-            assert processed_count >= 1, f"Expected at least 1 processed, got {processed_count}"
+            # All requests should be processed
+            assert processed_count == 5, (
+                f"Expected 5 processed, got {processed_count}. "
+                f"Failed requests: {failed_requests}"
+            )
             
             # Check stats
             stats = batcher.get_stats()
             assert stats["enabled"] is True
             
         finally:
-            batcher.stop(timeout=1.0)
+            batcher.stop(timeout=2.0)
     
     def test_steady_stream_pattern(self):
         """Test batching with steady stream of requests."""

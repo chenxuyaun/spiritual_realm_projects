@@ -16,7 +16,7 @@ from unittest.mock import Mock, patch, MagicMock
 import torch
 import numpy as np
 
-from mm_orch.optimization.optimization_manager import OptimizationManager
+from mm_orch.optimization.manager import OptimizationManager
 from mm_orch.optimization.config import (
     OptimizationConfig,
     VLLMConfig,

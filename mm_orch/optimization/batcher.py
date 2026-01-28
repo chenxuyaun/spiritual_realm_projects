@@ -428,25 +428,58 @@ class DynamicBatcher:
         
         while not self._stop_event.is_set():
             try:
-                # Check each model's queue
+                # Get list of models WITHOUT holding lock for entire loop
                 with self._lock:
                     models_to_process = list(self._request_queues.keys())
                 
+                # Process each model's queue
                 for model_name in models_to_process:
                     if self._stop_event.is_set():
                         break
                     self._process_model_queue(model_name)
                 
-                # Sleep briefly to avoid busy waiting
+                # Wait with shorter timeout to be more responsive
                 # Use wait() instead of sleep() so we can be interrupted
-                self._stop_event.wait(timeout=0.01)  # 10ms
+                self._stop_event.wait(timeout=0.005)  # 5ms
                 
             except Exception as e:
                 logger.error(f"Error in batching loop: {e}", exc_info=True)
                 if self._stop_event.is_set():
                     break
         
+        # Process any remaining requests before exit
+        self._process_remaining_requests()
+        
         logger.info("Batching loop stopped")
+    
+    def _process_remaining_requests(self):
+        """Process any remaining requests in queues before shutdown."""
+        logger.info("Processing remaining requests before shutdown")
+        
+        with self._lock:
+            models_with_requests = [
+                (model_name, list(req_queue))
+                for model_name, req_queue in self._request_queues.items()
+                if req_queue
+            ]
+        
+        for model_name, requests in models_with_requests:
+            logger.info(f"Processing {len(requests)} remaining requests for {model_name}")
+            
+            with self._lock:
+                req_queue = self._request_queues[model_name]
+                
+                while req_queue:
+                    # Force process remaining requests
+                    batch = self._form_batch(model_name, req_queue)
+                    
+                    if not batch:
+                        break
+            
+            # Process batch outside lock
+            if batch:
+                logger.debug(f"Processing remaining batch {batch.batch_id}: {batch.batch_size} requests")
+                self._simulate_batch_processing(batch)
     
     def _process_model_queue(self, model_name: str):
         """
@@ -455,7 +488,11 @@ class DynamicBatcher:
         Args:
             model_name: Name of the model
         """
+        # Check and form batch while holding lock
         with self._lock:
+            if model_name not in self._request_queues:
+                return
+            
             req_queue = self._request_queues[model_name]
             
             if not req_queue:
@@ -481,18 +518,19 @@ class DynamicBatcher:
             if not should_batch:
                 return
             
-            # Form batch
+            # Form batch (removes requests from queue)
             batch = self._form_batch(model_name, req_queue)
+        
+        # Process batch OUTSIDE the lock to avoid blocking other operations
+        if batch:
+            logger.debug(
+                f"Formed batch {batch.batch_id} for {model_name}: "
+                f"size={batch.batch_size}, reason={reason}"
+            )
             
-            if batch:
-                logger.debug(
-                    f"Formed batch {batch.batch_id} for {model_name}: "
-                    f"size={batch.batch_size}, reason={reason}"
-                )
-                
-                # In production, this would trigger actual inference
-                # For now, we'll simulate processing
-                self._simulate_batch_processing(batch)
+            # In production, this would trigger actual inference
+            # For now, we'll simulate processing
+            self._simulate_batch_processing(batch)
     
     def _form_batch(
         self,
