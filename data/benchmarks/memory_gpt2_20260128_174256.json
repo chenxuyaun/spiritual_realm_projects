@@ -1,0 +1,87 @@
+{
+  "report_name": "memory_gpt2_20260128_174256",
+  "model_name": "gpt2",
+  "timestamp": "2026-01-28T17:42:56.803003",
+  "device": "cpu",
+  "quick_mode": true,
+  "results": {
+    "model_load": {
+      "test_name": "model_load",
+      "model_name": "gpt2",
+      "timestamp": "2026-01-28T17:42:24.565656",
+      "model_load": {
+        "gpu_mb": 0.0,
+        "cpu_mb": 84.3359375
+      },
+      "inference": {
+        "gpu_peak_mb": 0.0,
+        "gpu_delta_mb": 0.0,
+        "cpu_peak_mb": 0.0,
+        "cpu_delta_mb": 0.0
+      },
+      "kv_cache_mb": 0.0,
+      "quantization": {
+        "type": null,
+        "memory_reduction_percent": 0.0
+      },
+      "config": {
+        "input_length": 0,
+        "output_length": 0,
+        "gc_before_measure": true
+      }
+    },
+    "inference": {
+      "test_name": "inference_memory",
+      "model_name": "gpt2",
+      "timestamp": "2026-01-28T17:42:34.530585",
+      "model_load": {
+        "gpu_mb": 0.0,
+        "cpu_mb": 0.0
+      },
+      "inference": {
+        "gpu_peak_mb": 0.0,
+        "gpu_delta_mb": 0.0,
+        "cpu_peak_mb": 0.0,
+        "cpu_delta_mb": 161.48307291666666
+      },
+      "kv_cache_mb": 0.0,
+      "quantization": {
+        "type": null,
+        "memory_reduction_percent": 0.0
+      },
+      "config": {
+        "input_length": 45,
+        "output_length": 0,
+        "gc_before_measure": true
+      }
+    },
+    "leak_detection": {
+      "runs": 10,
+      "result": {
+        "test_name": "inference_memory",
+        "model_name": "gpt2",
+        "timestamp": "2026-01-28T17:42:56.801489",
+        "model_load": {
+          "gpu_mb": 0.0,
+          "cpu_mb": 0.0
+        },
+        "inference": {
+          "gpu_peak_mb": 0.0,
+          "gpu_delta_mb": 0.0,
+          "cpu_peak_mb": 0.0,
+          "cpu_delta_mb": 0.005078125
+        },
+        "kv_cache_mb": 0.0,
+        "quantization": {
+          "type": null,
+          "memory_reduction_percent": 0.0
+        },
+        "config": {
+          "input_length": 45,
+          "output_length": 0,
+          "gc_before_measure": true
+        }
+      }
+    }
+  }
+}

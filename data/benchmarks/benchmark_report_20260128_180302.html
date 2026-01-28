@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>MuAI Benchmark Report</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+.container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+h2 { color: #34495e; margin-top: 30px; }
+h3 { color: #7f8c8d; }
+table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+th { background-color: #3498db; color: white; }
+tr:hover { background-color: #f5f5f5; }
+.metric { background: #ecf0f1; padding: 15px; margin: 10px 0; border-radius: 5px; }
+.success { color: #27ae60; font-weight: bold; }
+.warning { color: #f39c12; font-weight: bold; }
+.info { color: #3498db; font-weight: bold; }
+pre { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 5px; overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class='container'>
+<h1>MuAI Multi-Model Orchestration System</h1>
+<h2>Performance Benchmark Report</h2>
+<p><strong>Generated:</strong> 2026-01-28 18:03:02</p>
+<p><strong>Model:</strong> GPT-2 (124M parameters)</p>
+<p><strong>Device:</strong> CPU-only (PyTorch 2.8.0+cpu)</p>
+<hr>
+# Executive Summary<br><br>**Report Generated**: 2026-01-28 18:03:02<br>**Model**: GPT-2 (124M parameters)<br>**Device**: CPU-only (PyTorch 2.8.0+cpu)<br><br><h2> Key Findings<br><br><h2># Phase 1: Validation ✅<br>- **TTFT**: 1719.17 ms<br>- **Generation Speed**: 28.87 tokens/s<br>- **E2E Latency**: 1680.63 ms<br><br><h2># Phase 2: Latency Benchmarks ✅<br>- **Tests Completed**: 3<br>- **Input Lengths Tested**: 128, 512, 1024 tokens<br>- **TTFT Range**: 1918.48 - 3597.98 ms<br>- **Tokens/s Range**: 27.34 - 30.54<br><br><h2># Phase 3: Memory Benchmarks ✅<br>- **Model Load**: 84.34 MB<br>- **Inference Delta**: 161.48 MB<br>- **Memory Leak**: 0.0051 MB/iteration (negligible)<br>- **Total Footprint**: ~730 MB<br><br><h2># Phase 4: Throughput Benchmarks ✅<br>- **Single Request**: 0.84 req/s, 25.24 tokens/s<br>- **Best Concurrent**: Level 4 - 1.38 req/s, 41.46 tokens/s<br>- **Reliability**: 100% (0 failed requests)<br>
+<hr>
+<h2>Detailed Results</h2>
+<h3>Latency Benchmarks</h3>
+<table>
+<tr><th>Input Length</th><th>Output Length</th><th>TTFT (ms)</th><th>Tokens/s</th><th>E2E Latency (ms)</th></tr>
+<tr>
+<td>128</td>
+<td>64</td>
+<td>1918.48 ± 379.31</td>
+<td>30.54 ± 4.42</td>
+<td>2242.09 ± 292.14</td>
+</tr>
+<tr>
+<td>512</td>
+<td>128</td>
+<td>3161.94 ± 2043.96</td>
+<td>28.38 ± 0.43</td>
+<td>1715.72 ± 1564.45</td>
+</tr>
+<tr>
+<td>1024</td>
+<td>256</td>
+<td>3597.98 ± 3498.70</td>
+<td>27.34 ± 0.60</td>
+<td>4927.99 ± 4388.66</td>
+</tr>
+</table>
+<h3>Memory Benchmarks</h3>
+<table>
+<tr><th>Metric</th><th>Value (MB)</th></tr>
+<tr><td>Model Load</td><td>84.34</td></tr>
+<tr><td>Inference Delta (avg)</td><td>161.48</td></tr>
+<tr><td>Memory Leak (per iteration)</td><td>0.0051</td></tr>
+</table>
+<h3>Throughput Benchmarks</h3>
+<table>
+<tr><th>Test Type</th><th>Concurrency</th><th>Req/s</th><th>Tokens/s</th><th>Avg Latency (ms)</th></tr>
+<tr>
+<td>Single</td>
+<td>1</td>
+<td>0.84</td>
+<td>25.24</td>
+<td>1188.43</td>
+</tr>
+<tr>
+<td>Concurrent</td>
+<td>2</td>
+<td>1.26</td>
+<td>37.88</td>
+<td>1581.48</td>
+</tr>
+<tr>
+<td>Concurrent</td>
+<td>4</td>
+<td>1.38</td>
+<td>41.46</td>
+<td>2364.73</td>
+</tr>
+</table>
+<hr>
+<h2> Recommendations<br><br><h2># Production Deployment<br><br>**Optimal Configuration (CPU)**:<br>- Concurrency level: 2-4 (best throughput/latency balance)<br>- Input length: <512 tokens (for consistent latency)<br>- Memory allocation: 1 GB per instance<br><br><h2># Performance Optimization<br><br>**Immediate Actions**:<br>1. **GPU Deployment**: 7-14x speedup expected with GPU<br>2. **Model Quantization**: INT8 can reduce memory by 75% with minimal quality loss<br>3. **Batch Processing**: Use concurrent level 2-4 for optimal throughput<br><br>**Future Improvements**:<br>1. **vLLM Engine**: 2-3x speedup with PagedAttention (GPU required)<br>2. **ONNX Runtime**: 1.2-1.5x speedup possible<br>3. **Dynamic Batching**: Automatic request batching for variable load<br><br><h2># Known Limitations<br><br>**CPU Environment**:<br>- Latency increases significantly with input length >512 tokens<br>- High variance in TTFT for long inputs (>1024 tokens)<br>- Diminishing returns beyond concurrency level 4<br>
+</div>
+</body>
+</html>

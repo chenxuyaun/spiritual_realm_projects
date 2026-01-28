@@ -1,0 +1,104 @@
+{
+  "report_name": "throughput_gpt2_20260128_174628",
+  "model_name": "gpt2",
+  "timestamp": "2026-01-28T17:46:28.653814",
+  "device": "cpu",
+  "quick_mode": true,
+  "results": {
+    "single": {
+      "test_name": "single_throughput",
+      "model_name": "gpt2",
+      "timestamp": "2026-01-28T17:46:14.734061",
+      "single": {
+        "requests_per_second": 0.8414430209285393,
+        "tokens_per_second": 25.24329062785618
+      },
+      "concurrent": {
+        "requests_per_second": 0.0,
+        "tokens_per_second": 0.0,
+        "level": 1
+      },
+      "batch": {
+        "requests_per_second": 0.0,
+        "tokens_per_second": 0.0,
+        "size": 1
+      },
+      "latency": {
+        "mean_ms": 1188.4306400000005,
+        "p50_ms": 1176.0826999999986,
+        "p95_ms": 1228.784320000001,
+        "p99_ms": 1234.531824000001
+      },
+      "summary": {
+        "duration_seconds": 5.942172999999999,
+        "total_requests": 5,
+        "total_tokens": 150,
+        "failed_requests": 0
+      }
+    },
+    "concurrent": [
+      {
+        "test_name": "concurrent_throughput",
+        "model_name": "gpt2",
+        "timestamp": "2026-01-28T17:46:21.824723",
+        "single": {
+          "requests_per_second": 0.0,
+          "tokens_per_second": 0.0
+        },
+        "concurrent": {
+          "requests_per_second": 1.2627464254910787,
+          "tokens_per_second": 37.88239276473236,
+          "level": 2
+        },
+        "batch": {
+          "requests_per_second": 0.0,
+          "tokens_per_second": 0.0,
+          "size": 1
+        },
+        "latency": {
+          "mean_ms": 1581.4798333333329,
+          "p50_ms": 1584.8569000000002,
+          "p95_ms": 1610.0219499999992,
+          "p99_ms": 1613.0045499999985
+        },
+        "summary": {
+          "duration_seconds": 4.751547800000001,
+          "total_requests": 6,
+          "total_tokens": 180,
+          "failed_requests": 0
+        }
+      },
+      {
+        "test_name": "concurrent_throughput",
+        "model_name": "gpt2",
+        "timestamp": "2026-01-28T17:46:28.651303",
+        "single": {
+          "requests_per_second": 0.0,
+          "tokens_per_second": 0.0
+        },
+        "concurrent": {
+          "requests_per_second": 1.382053514540204,
+          "tokens_per_second": 41.46160543620612,
+          "level": 4
+        },
+        "batch": {
+          "requests_per_second": 0.0,
+          "tokens_per_second": 0.0,
+          "size": 1
+        },
+        "latency": {
+          "mean_ms": 2364.7280333333338,
+          "p50_ms": 2732.7872499999994,
+          "p95_ms": 2776.102200000002,
+          "p99_ms": 2776.2288400000025
+        },
+        "summary": {
+          "duration_seconds": 4.341365900000003,
+          "total_requests": 6,
+          "total_tokens": 180,
+          "failed_requests": 0
+        }
+      }
+    ]
+  }
+}
