@@ -32,19 +32,23 @@ class TestVLLMEndToEnd:
     def test_vllm_text_generation_flow(self):
         """Test complete text generation flow with vLLM."""
         # Setup: Configure vLLM
-        config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=False,
-            onnx_enabled=False,
-            engine_preference=["vllm", "pytorch"]
-        )
         vllm_config = VLLMConfig(
+            enabled=True,
             tensor_parallel_size=1,
             dtype="auto",
             gpu_memory_utilization=0.5
         )
+        deepspeed_config = DeepSpeedConfig(enabled=False)
+        onnx_config = ONNXConfig(enabled=False)
         
-        manager = OptimizationManager(config, vllm_config=vllm_config)
+        config = OptimizationConfig(
+            vllm=vllm_config,
+            deepspeed=deepspeed_config,
+            onnx=onnx_config,
+            engine_preference=["vllm", "pytorch"]
+        )
+        
+        manager = OptimizationManager(config)
         
         # Execute: Run inference
         inputs = {
@@ -67,7 +71,7 @@ class TestVLLMEndToEnd:
             assert hasattr(result, 'latency_ms')
             
             # Verify: Engine used
-            if manager.is_engine_available("vllm"):
+            if "vllm" in manager.get_available_engines():
                 assert result.engine_used == "vllm"
             else:
                 assert result.engine_used in ["pytorch", "deepspeed", "onnx"]
@@ -83,16 +87,18 @@ class TestVLLMEndToEnd:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="Requires CUDA")
     def test_vllm_batch_inference(self):
         """Test batch inference with vLLM."""
-        config = OptimizationConfig(
-            vllm_enabled=True,
-            engine_preference=["vllm"]
-        )
         vllm_config = VLLMConfig(
+            enabled=True,
             tensor_parallel_size=1,
             dtype="auto"
         )
         
-        manager = OptimizationManager(config, vllm_config=vllm_config)
+        config = OptimizationConfig(
+            vllm=vllm_config,
+            engine_preference=["vllm"]
+        )
+        
+        manager = OptimizationManager(config)
         
         # Execute: Batch inference
         inputs = {
@@ -113,7 +119,7 @@ class TestVLLMEndToEnd:
             
             # Verify: Batch processed
             assert result is not None
-            if manager.is_engine_available("vllm"):
+            if "vllm" in manager.get_available_engines():
                 assert result.batch_size == 3
                 assert len(result.outputs.get("generated_texts", [])) == 3
             
@@ -122,18 +128,20 @@ class TestVLLMEndToEnd:
     
     def test_vllm_continuous_batching(self):
         """Test continuous batching with dynamic request arrival."""
-        config = OptimizationConfig(
-            vllm_enabled=True,
-            engine_preference=["vllm"]
-        )
         vllm_config = VLLMConfig(
+            enabled=True,
             tensor_parallel_size=1,
             dtype="auto"
         )
         
-        manager = OptimizationManager(config, vllm_config=vllm_config)
+        config = OptimizationConfig(
+            vllm=vllm_config,
+            engine_preference=["vllm"]
+        )
         
-        if not manager.is_engine_available("vllm"):
+        manager = OptimizationManager(config)
+        
+        if "vllm" not in manager.get_available_engines():
             pytest.skip("vLLM not available")
         
         # Execute: Simulate dynamic request arrival
@@ -167,18 +175,22 @@ class TestDeepSpeedEndToEnd:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="Requires CUDA")
     def test_deepspeed_inference_flow(self):
         """Test complete inference flow with DeepSpeed."""
-        config = OptimizationConfig(
-            vllm_enabled=False,
-            deepspeed_enabled=True,
-            onnx_enabled=False,
-            engine_preference=["deepspeed", "pytorch"]
-        )
+        vllm_config = VLLMConfig(enabled=False)
         deepspeed_config = DeepSpeedConfig(
+            enabled=True,
             tensor_parallel=1,
             dtype="fp16"
         )
+        onnx_config = ONNXConfig(enabled=False)
         
-        manager = OptimizationManager(config, deepspeed_config=deepspeed_config)
+        config = OptimizationConfig(
+            vllm=vllm_config,
+            deepspeed=deepspeed_config,
+            onnx=onnx_config,
+            engine_preference=["deepspeed", "pytorch"]
+        )
+        
+        manager = OptimizationManager(config)
         
         # Execute: Run inference
         inputs = {
@@ -199,7 +211,7 @@ class TestDeepSpeedEndToEnd:
             assert hasattr(result, 'engine_used')
             
             # Verify: Engine used
-            if manager.is_engine_available("deepspeed"):
+            if "deepspeed" in manager.get_available_engines():
                 assert result.engine_used == "deepspeed"
             else:
                 assert result.engine_used in ["pytorch", "onnx"]
@@ -213,18 +225,20 @@ class TestDeepSpeedEndToEnd:
         if torch.cuda.device_count() < 2:
             pytest.skip("Requires multiple GPUs")
         
-        config = OptimizationConfig(
-            deepspeed_enabled=True,
-            engine_preference=["deepspeed"]
-        )
         deepspeed_config = DeepSpeedConfig(
+            enabled=True,
             tensor_parallel=2,  # Use 2 GPUs
             dtype="fp16"
         )
         
-        manager = OptimizationManager(config, deepspeed_config=deepspeed_config)
+        config = OptimizationConfig(
+            deepspeed=deepspeed_config,
+            engine_preference=["deepspeed"]
+        )
         
-        if not manager.is_engine_available("deepspeed"):
+        manager = OptimizationManager(config)
+        
+        if "deepspeed" not in manager.get_available_engines():
             pytest.skip("DeepSpeed not available")
         
         # Execute: Inference with tensor parallelism
@@ -253,18 +267,22 @@ class TestONNXEndToEnd:
     
     def test_onnx_conversion_and_inference(self):
         """Test model conversion and inference with ONNX."""
-        config = OptimizationConfig(
-            vllm_enabled=False,
-            deepspeed_enabled=False,
-            onnx_enabled=True,
-            engine_preference=["onnx", "pytorch"]
-        )
+        vllm_config = VLLMConfig(enabled=False)
+        deepspeed_config = DeepSpeedConfig(enabled=False)
         onnx_config = ONNXConfig(
+            enabled=True,
             execution_providers=["CPUExecutionProvider"],
             optimization_level="all"
         )
         
-        manager = OptimizationManager(config, onnx_config=onnx_config)
+        config = OptimizationConfig(
+            vllm=vllm_config,
+            deepspeed=deepspeed_config,
+            onnx=onnx_config,
+            engine_preference=["onnx", "pytorch"]
+        )
+        
+        manager = OptimizationManager(config)
         
         # Execute: Convert and run inference
         inputs = {
@@ -285,7 +303,7 @@ class TestONNXEndToEnd:
             assert hasattr(result, 'engine_used')
             
             # Verify: Engine used
-            if manager.is_engine_available("onnx"):
+            if "onnx" in manager.get_available_engines():
                 assert result.engine_used == "onnx"
             else:
                 assert result.engine_used == "pytorch"
@@ -295,17 +313,19 @@ class TestONNXEndToEnd:
     
     def test_onnx_output_equivalence(self):
         """Test that ONNX outputs match PyTorch outputs."""
-        config = OptimizationConfig(
-            onnx_enabled=True,
-            engine_preference=["onnx", "pytorch"]
-        )
         onnx_config = ONNXConfig(
+            enabled=True,
             execution_providers=["CPUExecutionProvider"]
         )
         
-        manager = OptimizationManager(config, onnx_config=onnx_config)
+        config = OptimizationConfig(
+            onnx=onnx_config,
+            engine_preference=["onnx", "pytorch"]
+        )
         
-        if not manager.is_engine_available("onnx"):
+        manager = OptimizationManager(config)
+        
+        if "onnx" not in manager.get_available_engines():
             pytest.skip("ONNX not available")
         
         # Execute: Run with both engines
@@ -345,9 +365,9 @@ class TestFallbackChain:
     def test_fallback_on_vllm_failure(self):
         """Test fallback from vLLM to other engines on failure."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
-            onnx_enabled=True,
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True),
             fallback_on_error=True,
             engine_preference=["vllm", "deepspeed", "onnx", "pytorch"]
         )
@@ -372,9 +392,9 @@ class TestFallbackChain:
     def test_fallback_chain_exhaustion(self):
         """Test behavior when all engines fail."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
-            onnx_enabled=True,
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True),
             fallback_on_error=True
         )
         
@@ -399,7 +419,7 @@ class TestFallbackChain:
     def test_fallback_preserves_functionality(self):
         """Test that fallback maintains correct functionality."""
         config = OptimizationConfig(
-            vllm_enabled=True,
+            vllm=VLLMConfig(enabled=True),
             fallback_on_error=True,
             engine_preference=["vllm", "pytorch"]
         )
@@ -423,9 +443,9 @@ class TestFallbackChain:
     def test_engine_availability_detection(self):
         """Test that engine availability is correctly detected."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
@@ -448,8 +468,8 @@ class TestFallbackChain:
     def test_fallback_with_different_input_formats(self):
         """Test fallback works with different input formats."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            onnx_enabled=True,
+            vllm=VLLMConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True),
             fallback_on_error=True
         )
         
@@ -491,9 +511,9 @@ class TestPerformanceComparison:
     def test_engine_latency_comparison(self):
         """Compare latency across different engines."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
@@ -504,7 +524,7 @@ class TestPerformanceComparison:
         
         # Test each available engine
         for engine in ["vllm", "deepspeed", "onnx", "pytorch"]:
-            if manager.is_engine_available(engine):
+            if engine in manager.get_available_engines():
                 try:
                     result = manager.infer(
                         model_name="gpt2",
@@ -525,9 +545,9 @@ class TestPerformanceComparison:
     def test_engine_throughput_comparison(self):
         """Compare throughput across different engines."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
@@ -542,7 +562,7 @@ class TestPerformanceComparison:
         
         # Test each available engine
         for engine in ["vllm", "deepspeed", "onnx", "pytorch"]:
-            if manager.is_engine_available(engine):
+            if engine in manager.get_available_engines():
                 try:
                     start_time = time.time()
                     result = manager.infer(

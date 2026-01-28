@@ -125,6 +125,11 @@ class TestDeepSpeedModelLoading:
         mock_ds_model = MagicMock()
         mock_deepspeed.init_inference.return_value = mock_ds_model
         
+        # Mock GPU manager to prevent fallback to single GPU
+        mock_gpu_manager = MagicMock()
+        mock_gpu_manager.allocate_gpus.return_value = ([0, 1, 2, 3], "tensor_parallel")
+        mock_gpu_manager.balance_load.return_value = [[0, 1], [2, 3]]
+        
         with patch.dict('sys.modules', {'deepspeed': mock_deepspeed}):
             with patch('transformers.AutoModelForCausalLM.from_pretrained') as mock_model:
                 with patch('transformers.AutoTokenizer.from_pretrained') as mock_tokenizer:
@@ -133,6 +138,9 @@ class TestDeepSpeedModelLoading:
                     mock_model.return_value = mock_model_instance
                     mock_tokenizer_instance = MagicMock()
                     mock_tokenizer.return_value = mock_tokenizer_instance
+                    
+                    # Mock the GPU manager
+                    engine._gpu_manager = mock_gpu_manager
                     
                     with patch.object(engine, 'is_available', return_value=True):
                         result = engine.load_model(

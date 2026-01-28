@@ -30,7 +30,7 @@ class TestEngineSwitching:
     def test_switch_from_vllm_to_pytorch(self):
         """Test switching from vLLM to PyTorch."""
         config = OptimizationConfig(
-            vllm_enabled=True,
+            vllm=VLLMConfig(enabled=True),
             engine_preference=["vllm", "pytorch"]
         )
         
@@ -53,16 +53,16 @@ class TestEngineSwitching:
         )
         
         # Verify: Different engines used (if vLLM available)
-        if manager.is_engine_available("vllm"):
+        if "vllm" in manager.get_available_engines():
             assert result1.engine_used == "vllm"
         assert result2.engine_used == "pytorch"
     
     def test_switch_between_all_engines(self):
         """Test switching between all available engines."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
@@ -71,7 +71,7 @@ class TestEngineSwitching:
         results = {}
         
         for engine in engines_to_test:
-            if manager.is_engine_available(engine):
+            if engine in manager.get_available_engines():
                 try:
                     inputs = {"prompts": [f"Test {engine}"], "max_tokens": 10}
                     result = manager.infer(
@@ -90,8 +90,8 @@ class TestEngineSwitching:
     def test_engine_switching_preserves_state(self):
         """Test that switching engines preserves model state."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
@@ -125,7 +125,7 @@ class TestEngineSwitching:
     def test_engine_preference_override(self):
         """Test that engine preference can be overridden per request."""
         config = OptimizationConfig(
-            vllm_enabled=True,
+            vllm=VLLMConfig(enabled=True),
             engine_preference=["vllm", "pytorch"]  # Default preference
         )
         
@@ -149,8 +149,8 @@ class TestRealEngineFallback:
     def test_fallback_on_initialization_failure(self):
         """Test fallback when engine initialization fails."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
             fallback_on_error=True,
             engine_preference=["vllm", "deepspeed", "pytorch"]
         )
@@ -173,8 +173,8 @@ class TestRealEngineFallback:
     def test_fallback_on_inference_failure(self):
         """Test fallback when inference fails."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            onnx_enabled=True,
+            vllm=VLLMConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True),
             fallback_on_error=True,
             engine_preference=["vllm", "onnx", "pytorch"]
         )
@@ -196,9 +196,9 @@ class TestRealEngineFallback:
     def test_fallback_chain_with_multiple_failures(self):
         """Test fallback chain with multiple engine failures."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
-            onnx_enabled=True,
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True),
             fallback_on_error=True,
             engine_preference=["vllm", "deepspeed", "onnx", "pytorch"]
         )
@@ -223,8 +223,8 @@ class TestRealEngineFallback:
     def test_fallback_with_different_error_types(self):
         """Test fallback with different types of errors."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            onnx_enabled=True,
+            vllm=VLLMConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True),
             fallback_on_error=True
         )
         
@@ -252,7 +252,7 @@ class TestRealEngineFallback:
     def test_fallback_disabled(self):
         """Test behavior when fallback is disabled."""
         config = OptimizationConfig(
-            vllm_enabled=True,
+            vllm=VLLMConfig(enabled=True),
             fallback_on_error=False,  # Disable fallback
             engine_preference=["vllm"]
         )
@@ -279,9 +279,9 @@ class TestPerformanceComparison:
     def test_latency_comparison_single_request(self):
         """Compare latency for single request across engines."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
@@ -291,7 +291,7 @@ class TestPerformanceComparison:
         
         # Test each engine
         for engine in ["vllm", "deepspeed", "onnx", "pytorch"]:
-            if manager.is_engine_available(engine):
+            if engine in manager.get_available_engines():
                 try:
                     result = manager.infer(
                         model_name="gpt2",
@@ -314,9 +314,9 @@ class TestPerformanceComparison:
     def test_throughput_comparison_batch(self):
         """Compare throughput for batch requests across engines."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
@@ -332,7 +332,7 @@ class TestPerformanceComparison:
         
         # Test each engine
         for engine in ["vllm", "deepspeed", "onnx", "pytorch"]:
-            if manager.is_engine_available(engine):
+            if engine in manager.get_available_engines():
                 try:
                     start_time = time.time()
                     result = manager.infer(
@@ -358,9 +358,9 @@ class TestPerformanceComparison:
     def test_memory_usage_comparison(self):
         """Compare memory usage across engines."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
@@ -370,7 +370,7 @@ class TestPerformanceComparison:
         
         # Test each engine
         for engine in ["vllm", "deepspeed", "onnx", "pytorch"]:
-            if manager.is_engine_available(engine):
+            if engine in manager.get_available_engines():
                 try:
                     # Get memory before
                     if torch.cuda.is_available():
@@ -401,8 +401,8 @@ class TestPerformanceComparison:
     def test_accuracy_comparison(self):
         """Compare output accuracy across engines."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
@@ -413,7 +413,7 @@ class TestPerformanceComparison:
         
         # Test each engine
         for engine in ["vllm", "onnx", "pytorch"]:
-            if manager.is_engine_available(engine):
+            if engine in manager.get_available_engines():
                 try:
                     result = manager.infer(
                         model_name="gpt2",
@@ -439,9 +439,9 @@ class TestEngineCompatibility:
     def test_engines_with_different_model_sizes(self):
         """Test engines with different model sizes."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
@@ -468,8 +468,8 @@ class TestEngineCompatibility:
     def test_engines_with_different_input_formats(self):
         """Test engines with different input formats."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
@@ -496,8 +496,8 @@ class TestEngineCompatibility:
     def test_engines_with_different_generation_params(self):
         """Test engines with different generation parameters."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
@@ -528,9 +528,9 @@ class TestEngineStatusReporting:
     def test_get_engine_status(self):
         """Test getting status of all engines."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
@@ -553,9 +553,9 @@ class TestEngineStatusReporting:
     def test_get_available_engines_for_model(self):
         """Test getting available engines for a specific model."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
@@ -571,16 +571,16 @@ class TestEngineStatusReporting:
     def test_engine_availability_detection(self):
         """Test engine availability detection."""
         config = OptimizationConfig(
-            vllm_enabled=True,
-            deepspeed_enabled=True,
-            onnx_enabled=True
+            vllm=VLLMConfig(enabled=True),
+            deepspeed=DeepSpeedConfig(enabled=True),
+            onnx=ONNXConfig(enabled=True)
         )
         
         manager = OptimizationManager(config)
         
         # Check each engine
         for engine in ["vllm", "deepspeed", "onnx", "pytorch"]:
-            is_available = manager.is_engine_available(engine)
+            is_available = engine in manager.get_available_engines()
             assert isinstance(is_available, bool)
             
             # PyTorch should always be available

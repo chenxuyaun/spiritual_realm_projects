@@ -130,7 +130,7 @@ def test_memory_threshold_triggers_alerts(memory_percent, threshold_percent):
     # Verify: Alert triggered if and only if memory exceeds threshold
     if memory_percent > threshold_percent:
         assert alert is not None, f"Expected alert for memory {memory_percent:.1f}% > threshold {threshold_percent}%"
-        assert alert.alert_type == AlertType.MEMORY.value
+        assert alert.alert_type == AlertType.RESOURCE.value  # Changed from MEMORY to RESOURCE
         assert "threshold exceeded" in alert.message.lower()
         assert alert.metadata["memory_percent"] == memory_percent
         assert alert.metadata["threshold_percent"] == threshold_percent

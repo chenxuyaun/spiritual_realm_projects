@@ -194,19 +194,21 @@ class TestConcurrentRequests:
             # Submit concurrent requests
             request_ids = []
             
-            def submit_request(i):
-                req_id = server.submit_request(
+            def submit_request_wrapper(i):
+                req_id = f"req-{i}"
+                success = server.submit_request(
+                    request_id=req_id,
                     model_name="test_model",
-                    inputs={"input_ids": [1, 2, 3, 4, 5]},
-                    parameters={"max_tokens": 10}
+                    inputs={"input_ids": [1, 2, 3, 4, 5]}
                 )
-                return req_id
+                return req_id if success else None
             
             with ThreadPoolExecutor(max_workers=10) as executor:
-                futures = [executor.submit(submit_request, i) for i in range(20)]
+                futures = [executor.submit(submit_request_wrapper, i) for i in range(20)]
                 for future in as_completed(futures):
                     req_id = future.result()
-                    request_ids.append(req_id)
+                    if req_id:
+                        request_ids.append(req_id)
             
             # Verify: All requests submitted
             assert len(request_ids) == 20
@@ -240,17 +242,19 @@ class TestConcurrentRequests:
             request_ids = []
             
             for i in range(20):
-                req_id = server.submit_request(
+                req_id = f"req-{i}"
+                success = server.submit_request(
+                    request_id=req_id,
                     model_name="test_model",
-                    inputs={"input_ids": [1, 2, 3]},
-                    parameters={}
+                    inputs={"input_ids": [1, 2, 3]}
                 )
-                request_ids.append(req_id)
+                if success:
+                    request_ids.append(req_id)
                 
                 # Check queue size
                 status = server.get_status()
                 queue_size = status.get("queue_size", 0)
-                assert queue_size <= config.queue_capacity
+                assert queue_size <= config.server.queue_capacity
             
             # Verify: Requests queued
             assert len(request_ids) == 20
@@ -277,10 +281,11 @@ class TestConcurrentRequests:
             num_requests = 50
             
             for i in range(num_requests):
+                req_id = f"req-{i}"
                 server.submit_request(
+                    request_id=req_id,
                     model_name="test_model",
-                    inputs={"input_ids": [1, 2, 3]},
-                    parameters={}
+                    inputs={"input_ids": [1, 2, 3]}
                 )
             
             elapsed = time.time() - start_time
@@ -314,12 +319,14 @@ class TestConcurrentRequests:
             def submit_for_model(model_name, count):
                 ids = []
                 for i in range(count):
-                    req_id = server.submit_request(
+                    req_id = f"{model_name}-req-{i}"
+                    success = server.submit_request(
+                        request_id=req_id,
                         model_name=model_name,
-                        inputs={"input_ids": [1, 2, 3]},
-                        parameters={}
+                        inputs={"input_ids": [1, 2, 3]}
                     )
-                    ids.append(req_id)
+                    if success:
+                        ids.append(req_id)
                 return ids
             
             with ThreadPoolExecutor(max_workers=3) as executor:
@@ -356,21 +363,29 @@ class TestQueueCapacity:
             request_ids = []
             
             for i in range(10):
-                req_id = server.submit_request(
+                req_id = f"req-{i}"
+                success = server.submit_request(
+                    request_id=req_id,
                     model_name="test_model",
-                    inputs={"input_ids": [1, 2, 3]},
-                    parameters={}
+                    inputs={"input_ids": [1, 2, 3]}
                 )
-                request_ids.append(req_id)
+                if success:
+                    request_ids.append(req_id)
             
-            # Try to exceed capacity
-            with pytest.raises(RuntimeError, match="queue.*full|capacity|limit"):
-                for i in range(20):
-                    server.submit_request(
-                        model_name="test_model",
-                        inputs={"input_ids": [1, 2, 3]},
-                        parameters={}
-                    )
+            # Try to exceed capacity - should return False when queue is full
+            full_count = 0
+            for i in range(20):
+                req_id = f"req-overflow-{i}"
+                success = server.submit_request(
+                    request_id=req_id,
+                    model_name="test_model",
+                    inputs={"input_ids": [1, 2, 3]}
+                )
+                if not success:
+                    full_count += 1
+            
+            # Verify: Some requests were rejected due to full queue
+            assert full_count > 0
             
         finally:
             server.stop(timeout=2)
@@ -391,10 +406,11 @@ class TestQueueCapacity:
         try:
             # Fill queue
             for i in range(15):
+                req_id = f"req-first-{i}"
                 server.submit_request(
+                    request_id=req_id,
                     model_name="test_model",
-                    inputs={"input_ids": [1, 2, 3]},
-                    parameters={}
+                    inputs={"input_ids": [1, 2, 3]}
                 )
             
             # Wait for some processing
@@ -402,15 +418,16 @@ class TestQueueCapacity:
             
             # Should be able to submit more
             for i in range(10):
+                req_id = f"req-second-{i}"
                 server.submit_request(
+                    request_id=req_id,
                     model_name="test_model",
-                    inputs={"input_ids": [1, 2, 3]},
-                    parameters={}
+                    inputs={"input_ids": [1, 2, 3]}
                 )
             
             # Verify: Queue managed
             status = server.get_status()
-            assert status["queue_size"] <= config.queue_capacity
+            assert status["queue_size"] <= config.server.queue_capacity
             
         finally:
             server.stop(timeout=2)
@@ -435,12 +452,14 @@ class TestGracefulShutdown:
         # Submit requests
         request_ids = []
         for i in range(10):
-            req_id = server.submit_request(
+            req_id = f"req-{i}"
+            success = server.submit_request(
+                request_id=req_id,
                 model_name="test_model",
-                inputs={"input_ids": [1, 2, 3]},
-                parameters={}
+                inputs={"input_ids": [1, 2, 3]}
             )
-            request_ids.append(req_id)
+            if success:
+                request_ids.append(req_id)
         
         # Initiate graceful shutdown
         start_time = time.time()
@@ -469,10 +488,11 @@ class TestGracefulShutdown:
         
         # Submit many requests
         for i in range(30):
+            req_id = f"req-{i}"
             server.submit_request(
+                request_id=req_id,
                 model_name="test_model",
-                inputs={"input_ids": [1, 2, 3]},
-                parameters={}
+                inputs={"input_ids": [1, 2, 3]}
             )
         
         # Shutdown with timeout
@@ -505,10 +525,11 @@ class TestGracefulShutdown:
         
         # Try to submit request during shutdown
         with pytest.raises(RuntimeError, match="shutdown|stopped|not.*running"):
+            req_id = "req-during-shutdown"
             server.submit_request(
+                request_id=req_id,
                 model_name="test_model",
-                inputs={"input_ids": [1, 2, 3]},
-                parameters={}
+                inputs={"input_ids": [1, 2, 3]}
             )
         
         # Wait for shutdown to complete
@@ -540,7 +561,7 @@ class TestServerHealthDegradation:
             # Verify: Healthy status
             assert health.status in ["healthy", "starting"]
             assert health.queue_size >= 0
-            assert health.queue_capacity == config.queue_capacity
+            assert health.queue_capacity == config.server.queue_capacity
             
         finally:
             server.stop(timeout=2)
@@ -561,10 +582,11 @@ class TestServerHealthDegradation:
         try:
             # Fill queue significantly
             for i in range(18):
+                req_id = f"req-{i}"
                 server.submit_request(
+                    request_id=req_id,
                     model_name="test_model",
-                    inputs={"input_ids": [1, 2, 3]},
-                    parameters={}
+                    inputs={"input_ids": [1, 2, 3]}
                 )
             
             # Check health
@@ -634,10 +656,11 @@ class TestServerWithOptimization:
         try:
             # Submit requests that can be batched
             for i in range(10):
+                req_id = f"req-{i}"
                 server.submit_request(
+                    request_id=req_id,
                     model_name="test_model",
-                    inputs={"input_ids": [1, 2, 3]},
-                    parameters={}
+                    inputs={"input_ids": [1, 2, 3]}
                 )
             
             # Wait for batching
@@ -676,10 +699,11 @@ class TestServerWithOptimization:
             conversation_id = "conv_001"
             
             for turn in range(3):
+                req_id = f"req-turn-{turn}"
                 server.submit_request(
+                    request_id=req_id,
                     model_name="test_model",
-                    inputs={"input_ids": [1, 2, 3]},
-                    parameters={"conversation_id": conversation_id}
+                    inputs={"input_ids": [1, 2, 3]}
                 )
             
             # Wait for processing

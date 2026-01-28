@@ -173,7 +173,7 @@ class TestMemoryAlerts:
         
         alert = detector.check_resources(memory_percent=95.0)
         assert alert is not None
-        assert alert.alert_type == AlertType.MEMORY.value
+        assert alert.alert_type == AlertType.RESOURCE.value  # Changed from MEMORY to RESOURCE
         assert "95.0%" in alert.message
     
     def test_gpu_memory_prioritized(self):
