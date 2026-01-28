@@ -16,10 +16,11 @@ import math
 @dataclass
 class PADState:
     """PAD emotional state vector."""
+
     pleasure: float
     arousal: float
     dominance: float
-    
+
     def __post_init__(self) -> None:
         if not isinstance(self.pleasure, (int, float)):
             raise ValueError("pleasure must be a number")
@@ -30,28 +31,29 @@ class PADState:
         self.pleasure = max(-1.0, min(1.0, float(self.pleasure)))
         self.arousal = max(0.0, min(1.0, float(self.arousal)))
         self.dominance = max(-1.0, min(1.0, float(self.dominance)))
-    
+
     def to_dict(self) -> Dict[str, float]:
         return {"pleasure": self.pleasure, "arousal": self.arousal, "dominance": self.dominance}
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PADState":
         return cls(data.get("pleasure", 0.0), data.get("arousal", 0.4), data.get("dominance", 0.0))
-    
+
     def distance_to(self, other: "PADState") -> float:
         return math.sqrt(
-            (self.pleasure - other.pleasure) ** 2 +
-            (self.arousal - other.arousal) ** 2 +
-            (self.dominance - other.dominance) ** 2
+            (self.pleasure - other.pleasure) ** 2
+            + (self.arousal - other.arousal) ** 2
+            + (self.dominance - other.dominance) ** 2
         )
-    
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, PADState):
             return False
-        return (abs(self.pleasure - other.pleasure) < 1e-6 and
-                abs(self.arousal - other.arousal) < 1e-6 and
-                abs(self.dominance - other.dominance) < 1e-6)
-
+        return (
+            abs(self.pleasure - other.pleasure) < 1e-6
+            and abs(self.arousal - other.arousal) < 1e-6
+            and abs(self.dominance - other.dominance) < 1e-6
+        )
 
 
 # PAD coordinates for discrete emotions
@@ -80,13 +82,14 @@ EMOTION_PAD_MAPPING: Dict[str, PADState] = {
 @dataclass
 class PADEmotionConfig:
     """Configuration for the PAD emotion model."""
+
     decay_rate: float = 0.95
     decay_interval: float = 60.0
     baseline_pleasure: float = 0.0
     baseline_arousal: float = 0.4
     baseline_dominance: float = 0.0
     min_intensity_threshold: float = 0.1
-    
+
     def __post_init__(self) -> None:
         if not (0.0 <= self.decay_rate <= 1.0):
             raise ValueError("decay_rate must be between 0.0 and 1.0")
@@ -100,7 +103,7 @@ class PADEmotionConfig:
             raise ValueError("baseline_dominance must be between -1.0 and 1.0")
         if self.min_intensity_threshold < 0:
             raise ValueError("min_intensity_threshold must be non-negative")
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "decay_rate": self.decay_rate,
@@ -110,7 +113,7 @@ class PADEmotionConfig:
             "baseline_dominance": self.baseline_dominance,
             "min_intensity_threshold": self.min_intensity_threshold,
         }
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PADEmotionConfig":
         return cls(
@@ -123,16 +126,15 @@ class PADEmotionConfig:
         )
 
 
-
 class PADEmotionModel:
     """PAD-based emotion model with three dimensions."""
-    
+
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         if config is not None:
             self._config = PADEmotionConfig.from_dict(config)
         else:
             self._config = PADEmotionConfig()
-        
+
         self._state = PADState(
             self._config.baseline_pleasure,
             self._config.baseline_arousal,
@@ -149,18 +151,18 @@ class PADEmotionModel:
         self._total_updates: int = 0
         self._total_decays: int = 0
         self._initialized_at: float = time.time()
-    
+
     def get_state(self) -> PADState:
         """Get current PAD state."""
         return PADState(self._state.pleasure, self._state.arousal, self._state.dominance)
-    
+
     def set_state(self, state: PADState) -> None:
         """Directly set PAD state."""
         if not isinstance(state, PADState):
             raise TypeError("state must be a PADState instance")
         self._record_state_change("set", state)
         self._state = PADState(state.pleasure, state.arousal, state.dominance)
-    
+
     def update_state(
         self,
         pleasure_delta: float = 0.0,
@@ -173,44 +175,52 @@ class PADEmotionModel:
             self._state.arousal + arousal_delta,
             self._state.dominance + dominance_delta,
         )
-        self._record_state_change("update", new_state, {
-            "pleasure_delta": pleasure_delta,
-            "arousal_delta": arousal_delta,
-            "dominance_delta": dominance_delta,
-        })
+        self._record_state_change(
+            "update",
+            new_state,
+            {
+                "pleasure_delta": pleasure_delta,
+                "arousal_delta": arousal_delta,
+                "dominance_delta": dominance_delta,
+            },
+        )
         self._state = new_state
         self._total_updates += 1
         return self.get_state()
-    
+
     def apply_decay(self, decay_rate: Optional[float] = None) -> PADState:
         """Apply decay toward baseline."""
         rate = decay_rate if decay_rate is not None else self._config.decay_rate
         if not (0.0 <= rate <= 1.0):
             raise ValueError("decay_rate must be between 0.0 and 1.0")
-        
-        new_pleasure = self._baseline.pleasure + rate * (self._state.pleasure - self._baseline.pleasure)
+
+        new_pleasure = self._baseline.pleasure + rate * (
+            self._state.pleasure - self._baseline.pleasure
+        )
         new_arousal = self._baseline.arousal + rate * (self._state.arousal - self._baseline.arousal)
-        new_dominance = self._baseline.dominance + rate * (self._state.dominance - self._baseline.dominance)
-        
+        new_dominance = self._baseline.dominance + rate * (
+            self._state.dominance - self._baseline.dominance
+        )
+
         new_state = PADState(new_pleasure, new_arousal, new_dominance)
         self._record_state_change("decay", new_state, {"decay_rate": rate})
         self._state = new_state
         self._last_decay_time = time.time()
         self._total_decays += 1
         return self.get_state()
-    
+
     def apply_time_based_decay(self) -> PADState:
         """Apply decay based on elapsed time since last decay."""
         elapsed = time.time() - self._last_decay_time
         intervals = int(elapsed / self._config.decay_interval)
         if intervals > 0:
-            effective_rate = self._config.decay_rate ** intervals
+            effective_rate = self._config.decay_rate**intervals
             return self.apply_decay(effective_rate)
         return self.get_state()
-    
+
     def get_dominant_emotion(self) -> str:
         """Get the closest discrete emotion label using nearest neighbor."""
-        min_distance = float('inf')
+        min_distance = float("inf")
         dominant = "neutral"
         for emotion, pad_coords in EMOTION_PAD_MAPPING.items():
             distance = self._state.distance_to(pad_coords)
@@ -218,21 +228,20 @@ class PADEmotionModel:
                 min_distance = distance
                 dominant = emotion
         return dominant
-    
+
     def get_emotion_intensity(self) -> float:
         """Get overall emotional intensity (distance from neutral)."""
         neutral = EMOTION_PAD_MAPPING["neutral"]
         return self._state.distance_to(neutral)
-    
+
     def is_emotional(self) -> bool:
         """Check if current state is significantly different from neutral."""
         return self.get_emotion_intensity() >= self._config.min_intensity_threshold
-    
+
     def map_to_valence_arousal(self) -> Tuple[float, float]:
         """Map to legacy valence-arousal format for compatibility."""
         return (self._state.pleasure, self._state.arousal)
 
-    
     def get_emotion_probabilities(self) -> Dict[str, float]:
         """Get probability distribution over discrete emotions."""
         distances: Dict[str, float] = {}
@@ -246,7 +255,7 @@ class PADEmotionModel:
         if total > 0:
             return {e: s / total for e, s in similarities.items()}
         return {e: 1.0 / len(EMOTION_PAD_MAPPING) for e in EMOTION_PAD_MAPPING}
-    
+
     def _record_state_change(
         self,
         change_type: str,
@@ -263,8 +272,8 @@ class PADEmotionModel:
         }
         self._state_history.append(entry)
         if len(self._state_history) > self._max_history_size:
-            self._state_history = self._state_history[-self._max_history_size:]
-    
+            self._state_history = self._state_history[-self._max_history_size :]
+
     def get_statistics(self) -> Dict[str, Any]:
         """Get statistics about the emotion model."""
         return {
@@ -278,13 +287,13 @@ class PADEmotionModel:
             "history_size": len(self._state_history),
             "uptime_seconds": time.time() - self._initialized_at,
         }
-    
+
     def get_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get state change history."""
         if limit is not None:
             return self._state_history[-limit:]
         return self._state_history.copy()
-    
+
     def reset_to_baseline(self) -> PADState:
         """Reset state to baseline."""
         self._record_state_change("reset", self._baseline)
@@ -294,13 +303,13 @@ class PADEmotionModel:
             self._baseline.dominance,
         )
         return self.get_state()
-    
+
     def set_baseline(self, baseline: PADState) -> None:
         """Set a new baseline state."""
         if not isinstance(baseline, PADState):
             raise TypeError("baseline must be a PADState instance")
         self._baseline = PADState(baseline.pleasure, baseline.arousal, baseline.dominance)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert the emotion model state to dictionary representation."""
         return {
@@ -314,7 +323,7 @@ class PADEmotionModel:
                 "initialized_at": self._initialized_at,
             },
         }
-    
+
     def load_state(self, state: Dict[str, Any]) -> None:
         """Load state from a dictionary representation."""
         if "config" in state:
@@ -330,18 +339,18 @@ class PADEmotionModel:
             self._total_updates = stats.get("total_updates", 0)
             self._total_decays = stats.get("total_decays", 0)
             self._initialized_at = stats.get("initialized_at", time.time())
-    
+
     def from_dict(self, state: Dict[str, Any]) -> None:
         """
         Restore state from a dictionary representation.
-        
+
         Alias for load_state() for consistency with other modules.
-        
+
         Args:
             state: Dictionary containing saved state.
         """
         self.load_state(state)
-    
+
     def clear_history(self) -> None:
         """Clear state change history."""
         self._state_history.clear()

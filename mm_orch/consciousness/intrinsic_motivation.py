@@ -20,6 +20,7 @@ import time
 @dataclass
 class IntrinsicMotivationConfig:
     """Configuration for the intrinsic motivation engine."""
+
     base_curiosity_reward: float = 0.5
     prediction_error_weight: float = 0.7
     novelty_threshold: float = 0.5
@@ -79,6 +80,7 @@ class IntrinsicMotivationConfig:
 @dataclass
 class FamiliarityEntry:
     """Tracks familiarity with a specific stimulus."""
+
     stimulus_hash: str
     encounter_count: int = 1
     familiarity_score: float = 0.0
@@ -116,6 +118,7 @@ class FamiliarityEntry:
 @dataclass
 class ActionExplorationInfo:
     """Tracks exploration information for an action."""
+
     action: str
     attempt_count: int = 0
     contexts_seen: List[str] = field(default_factory=list)
@@ -147,7 +150,7 @@ class ActionExplorationInfo:
 class IntrinsicMotivationEngine:
     """
     Manages intrinsic motivation and curiosity-driven exploration.
-    
+
     Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
     """
 
@@ -178,9 +181,7 @@ class IntrinsicMotivationEngine:
         content = json.dumps(context, sort_keys=True, default=str)
         return hashlib.sha256(content.encode()).hexdigest()[:16]
 
-    def _calculate_prediction_error(
-        self, predicted_outcome: Any, actual_outcome: Any
-    ) -> float:
+    def _calculate_prediction_error(self, predicted_outcome: Any, actual_outcome: Any) -> float:
         """Calculate prediction error between predicted and actual outcomes."""
         if predicted_outcome is None and actual_outcome is None:
             return 0.0
@@ -201,15 +202,15 @@ class IntrinsicMotivationEngine:
                 return 0.0
             matches = sum(1 for k in all_keys if predicted_outcome.get(k) == actual_outcome.get(k))
             return 1.0 - (matches / len(all_keys))
-        if isinstance(predicted_outcome, (list, tuple)) and isinstance(actual_outcome, (list, tuple)):
+        if isinstance(predicted_outcome, (list, tuple)) and isinstance(
+            actual_outcome, (list, tuple)
+        ):
             max_len = max(len(predicted_outcome), len(actual_outcome), 1)
             matches = sum(1 for a, b in zip(predicted_outcome, actual_outcome) if a == b)
             return 1.0 - (matches / max_len)
         return 0.0 if predicted_outcome == actual_outcome else 1.0
 
-    def calculate_curiosity_reward(
-        self, predicted_outcome: Any, actual_outcome: Any
-    ) -> float:
+    def calculate_curiosity_reward(self, predicted_outcome: Any, actual_outcome: Any) -> float:
         """
         Calculate curiosity reward based on prediction error.
         Returns reward value (0.0 to 1.0) proportional to information gain.
@@ -220,8 +221,8 @@ class IntrinsicMotivationEngine:
         max_info_gain = math.log1p(self._config.information_gain_scale)
         normalized_gain = information_gain / max_info_gain if max_info_gain > 0 else 0.0
         reward = (
-            (1 - self._config.prediction_error_weight) * self._config.base_curiosity_reward +
-            self._config.prediction_error_weight * normalized_gain
+            (1 - self._config.prediction_error_weight) * self._config.base_curiosity_reward
+            + self._config.prediction_error_weight * normalized_gain
         )
         reward = min(1.0, max(0.0, reward))
         self._total_curiosity_rewards += reward
@@ -262,7 +263,8 @@ class IntrinsicMotivationEngine:
             entry.last_encountered = current_time
             entry.familiarity_score = min(
                 1.0,
-                entry.familiarity_score + (1.0 - entry.familiarity_score) * self._config.familiarity_decay_rate
+                entry.familiarity_score
+                + (1.0 - entry.familiarity_score) * self._config.familiarity_decay_rate,
             )
         self._prune_familiarity_tracker()
 
@@ -313,7 +315,9 @@ class IntrinsicMotivationEngine:
                 if len(info.contexts_seen) > 100:
                     info.contexts_seen = info.contexts_seen[-100:]
             n = info.attempt_count
-            info.average_information_gain = (info.average_information_gain * (n - 1) + information_gain) / n
+            info.average_information_gain = (
+                info.average_information_gain * (n - 1) + information_gain
+            ) / n
 
     def decay_curiosity(self, stimulus: Any) -> None:
         """
@@ -324,7 +328,9 @@ class IntrinsicMotivationEngine:
         if stimulus_hash not in self._familiarity_tracker:
             return
         entry = self._familiarity_tracker[stimulus_hash]
-        entry.curiosity_level = max(0.0, entry.curiosity_level * (1.0 - self._config.curiosity_decay_rate))
+        entry.curiosity_level = max(
+            0.0, entry.curiosity_level * (1.0 - self._config.curiosity_decay_rate)
+        )
 
     def get_intrinsic_reward(self, stimulus: Any) -> float:
         """
@@ -334,9 +340,9 @@ class IntrinsicMotivationEngine:
         novelty = self.get_novelty_score(stimulus)
         if novelty > self._config.novelty_threshold:
             reward = self._config.base_curiosity_reward + (
-                (1.0 - self._config.base_curiosity_reward) *
-                (novelty - self._config.novelty_threshold) /
-                (1.0 - self._config.novelty_threshold)
+                (1.0 - self._config.base_curiosity_reward)
+                * (novelty - self._config.novelty_threshold)
+                / (1.0 - self._config.novelty_threshold)
             )
         else:
             reward = self._config.base_curiosity_reward * (novelty / self._config.novelty_threshold)
@@ -351,7 +357,7 @@ class IntrinsicMotivationEngine:
         self,
         actions: List[str],
         context: Dict[str, Any],
-        known_rewards: Optional[Dict[str, float]] = None
+        known_rewards: Optional[Dict[str, float]] = None,
     ) -> Tuple[str, float]:
         """
         Select an action balancing exploration and exploitation.
@@ -362,13 +368,13 @@ class IntrinsicMotivationEngine:
         if known_rewards is None:
             known_rewards = {}
         best_action = actions[0]
-        best_score = float('-inf')
+        best_score = float("-inf")
         for action in actions:
             exploration_bonus = self.get_exploration_bonus(action, context)
             known_reward = known_rewards.get(action, 0.5)
             score = (
-                self._config.exploration_weight * exploration_bonus +
-                (1.0 - self._config.exploration_weight) * known_reward
+                self._config.exploration_weight * exploration_bonus
+                + (1.0 - self._config.exploration_weight) * known_reward
             )
             if score > best_score:
                 best_score = score

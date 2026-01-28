@@ -20,11 +20,11 @@ import uuid
 class Experience:
     """
     Experience for replay buffer.
-    
+
     Represents a single experience that can be stored and replayed for
     continuous learning. Each experience captures the context, action taken,
     outcome, and associated reward/priority information.
-    
+
     Attributes:
         experience_id: Unique identifier for the experience.
         task_type: Type of task this experience relates to.
@@ -36,6 +36,7 @@ class Experience:
         timestamp: When the experience occurred.
         metadata: Additional metadata about the experience.
     """
+
     experience_id: str
     task_type: str
     context: Dict[str, Any]
@@ -98,6 +99,7 @@ class Experience:
 @dataclass
 class ExperienceReplayConfig:
     """Configuration for the experience replay buffer."""
+
     max_size: int = 10000
     default_priority: float = 0.5
     priority_alpha: float = 0.6  # How much prioritization to use (0 = uniform, 1 = full priority)
@@ -147,22 +149,22 @@ class ExperienceReplayConfig:
 class ExperienceReplayBuffer:
     """
     Manages experience storage and replay for continuous learning.
-    
+
     This buffer stores experiences and supports multiple sampling strategies:
     - uniform: All experiences have equal probability of being sampled
     - prioritized: Higher priority experiences are more likely to be sampled
     - stratified: Samples are drawn proportionally from each task type
-    
+
     The buffer also implements importance-weighted pruning to maintain size
     limits while retaining the most valuable experiences.
-    
+
     Requirements: 9.1, 9.3, 9.5
     """
 
     def __init__(self, max_size: int = 10000, config: Optional[Dict[str, Any]] = None):
         """
         Initialize the experience replay buffer.
-        
+
         Args:
             max_size: Maximum number of experiences to store.
             config: Optional configuration dictionary.
@@ -174,13 +176,13 @@ class ExperienceReplayBuffer:
                 self._config.max_size = max_size
         else:
             self._config = ExperienceReplayConfig(max_size=max_size)
-        
+
         # Main storage: experience_id -> Experience
         self._experiences: Dict[str, Experience] = {}
-        
+
         # Index by task type for stratified sampling
         self._task_type_index: Dict[str, List[str]] = {}
-        
+
         # Statistics
         self._total_stored: int = 0
         self._total_sampled: int = 0
@@ -194,73 +196,73 @@ class ExperienceReplayBuffer:
     def store(self, experience: Experience) -> str:
         """
         Store an experience and return its ID.
-        
+
         If the experience already has an ID, it will be used. Otherwise,
         a new ID will be generated. If the buffer is at capacity, pruning
         will be triggered automatically.
-        
+
         Args:
             experience: The experience to store.
-            
+
         Returns:
             The experience ID.
-            
+
         Validates: Requirements 9.1
         """
         # Check if we need to prune before adding
         if len(self._experiences) >= self._config.max_size:
             self.prune()
-        
+
         # Store the experience
         exp_id = experience.experience_id
         self._experiences[exp_id] = experience
-        
+
         # Update task type index
         task_type = experience.task_type
         if task_type not in self._task_type_index:
             self._task_type_index[task_type] = []
         if exp_id not in self._task_type_index[task_type]:
             self._task_type_index[task_type].append(exp_id)
-        
+
         self._total_stored += 1
         return exp_id
 
     def sample(self, batch_size: int, strategy: str = "prioritized") -> List[Experience]:
         """
         Sample experiences for replay.
-        
+
         Args:
             batch_size: Number of experiences to sample.
             strategy: Sampling strategy - "uniform", "prioritized", or "stratified".
-            
+
         Returns:
             List of sampled experiences.
-            
+
         Raises:
             ValueError: If strategy is invalid or batch_size is invalid.
-            
+
         Validates: Requirements 9.1, 9.3
         """
         if batch_size < 0:
             raise ValueError("batch_size must be non-negative")
-        
+
         if batch_size == 0 or len(self._experiences) == 0:
             return []
-        
+
         valid_strategies = {"uniform", "prioritized", "stratified"}
         if strategy not in valid_strategies:
             raise ValueError(f"Invalid strategy '{strategy}'. Must be one of: {valid_strategies}")
-        
+
         # Limit batch size to available experiences
         actual_batch_size = min(batch_size, len(self._experiences))
-        
+
         if strategy == "uniform":
             sampled = self._sample_uniform(actual_batch_size)
         elif strategy == "prioritized":
             sampled = self._sample_prioritized(actual_batch_size)
         else:  # stratified
             sampled = self._sample_stratified(actual_batch_size)
-        
+
         self._total_sampled += len(sampled)
         return sampled
 
@@ -273,40 +275,40 @@ class ExperienceReplayBuffer:
     def _sample_prioritized(self, batch_size: int) -> List[Experience]:
         """
         Sample experiences with probability proportional to priority.
-        
+
         Uses priority^alpha as the sampling weight, where alpha controls
         how much prioritization is used (0 = uniform, 1 = full priority).
-        
+
         Validates: Requirements 9.3
         """
         exp_list = list(self._experiences.values())
-        
+
         # Calculate sampling weights based on priority
         weights = []
         for exp in exp_list:
             # Ensure minimum priority to prevent zero probability
             priority = max(self._config.min_priority, exp.priority)
             # Apply alpha exponent for prioritization control
-            weight = priority ** self._config.priority_alpha
+            weight = priority**self._config.priority_alpha
             weights.append(weight)
-        
+
         # Normalize weights
         total_weight = sum(weights)
         if total_weight == 0:
             # Fallback to uniform if all weights are zero
             return self._sample_uniform(batch_size)
-        
+
         probabilities = [w / total_weight for w in weights]
-        
+
         # Sample without replacement using weighted selection
         sampled = []
         available_indices = list(range(len(exp_list)))
         available_probs = probabilities.copy()
-        
+
         for _ in range(batch_size):
             if not available_indices:
                 break
-            
+
             # Normalize remaining probabilities
             total_prob = sum(available_probs)
             if total_prob == 0:
@@ -314,42 +316,44 @@ class ExperienceReplayBuffer:
                 idx = random.choice(available_indices)
             else:
                 normalized_probs = [p / total_prob for p in available_probs]
-                idx = random.choices(range(len(available_indices)), weights=normalized_probs, k=1)[0]
-            
+                idx = random.choices(range(len(available_indices)), weights=normalized_probs, k=1)[
+                    0
+                ]
+
             sampled.append(exp_list[available_indices[idx]])
-            
+
             # Remove selected index
             available_indices.pop(idx)
             available_probs.pop(idx)
-        
+
         return sampled
 
     def _sample_stratified(self, batch_size: int) -> List[Experience]:
         """
         Sample experiences proportionally from each task type.
-        
+
         Ensures representation from all task types in the buffer.
-        
+
         Validates: Requirements 9.1
         """
         if not self._task_type_index:
             return []
-        
+
         # Calculate how many samples per task type
         task_types = list(self._task_type_index.keys())
         num_task_types = len(task_types)
-        
+
         # Calculate proportional allocation based on task type counts
         total_experiences = len(self._experiences)
         samples_per_type: Dict[str, int] = {}
-        
+
         # First pass: ensure at least 1 sample from each type if batch_size >= num_task_types
         if batch_size >= num_task_types:
             # Guarantee at least 1 from each type
             for task_type in task_types:
                 samples_per_type[task_type] = 1
             remaining = batch_size - num_task_types
-            
+
             # Distribute remaining samples proportionally
             if remaining > 0:
                 for task_type in task_types:
@@ -359,7 +363,7 @@ class ExperienceReplayBuffer:
                     # Don't exceed available experiences for this type
                     max_additional = type_count - samples_per_type[task_type]
                     samples_per_type[task_type] += min(additional, max_additional)
-                
+
                 # Distribute any leftover samples
                 current_total = sum(samples_per_type.values())
                 leftover = batch_size - current_total
@@ -385,7 +389,7 @@ class ExperienceReplayBuffer:
                 allocation = min(allocation, type_count, remaining)
                 samples_per_type[task_type] = allocation
                 remaining -= allocation
-        
+
         # Sample from each task type
         sampled = []
         for task_type, num_samples in samples_per_type.items():
@@ -394,23 +398,23 @@ class ExperienceReplayBuffer:
             exp_ids = self._task_type_index[task_type]
             sampled_ids = random.sample(exp_ids, min(num_samples, len(exp_ids)))
             sampled.extend([self._experiences[exp_id] for exp_id in sampled_ids])
-        
+
         return sampled
 
     def update_priority(self, experience_id: str, priority: float) -> None:
         """
         Update priority of an experience.
-        
+
         Args:
             experience_id: ID of the experience to update.
             priority: New priority value (will be clamped to [0.0, 1.0]).
-            
+
         Raises:
             KeyError: If experience_id is not found.
         """
         if experience_id not in self._experiences:
             raise KeyError(f"Experience '{experience_id}' not found in buffer")
-        
+
         # Clamp priority to valid range
         clamped_priority = max(0.0, min(1.0, float(priority)))
         self._experiences[experience_id].priority = clamped_priority
@@ -418,53 +422,50 @@ class ExperienceReplayBuffer:
     def get_task_type_distribution(self) -> Dict[str, int]:
         """
         Get distribution of experiences by task type.
-        
+
         Returns:
             Dictionary mapping task type to count of experiences.
-            
+
         Validates: Requirements 9.1
         """
-        return {
-            task_type: len(exp_ids)
-            for task_type, exp_ids in self._task_type_index.items()
-        }
+        return {task_type: len(exp_ids) for task_type, exp_ids in self._task_type_index.items()}
 
     def prune(self) -> int:
         """
         Remove low-priority experiences to maintain size limit.
-        
+
         Uses importance-weighted pruning to retain the most valuable
         experiences. Experiences with lower priority are more likely
         to be removed.
-        
+
         Returns:
             Number of experiences removed.
-            
+
         Validates: Requirements 9.5
         """
         current_size = len(self._experiences)
         if current_size == 0:
             return 0
-        
+
         # Calculate target size after pruning
         target_size = int(self._config.max_size * (1 - self._config.prune_ratio))
         num_to_remove = max(0, current_size - target_size)
-        
+
         if num_to_remove == 0:
             return 0
-        
+
         # Sort experiences by priority (ascending) - lowest priority first
         sorted_experiences = sorted(
             self._experiences.values(),
-            key=lambda e: (e.priority, e.timestamp)  # Secondary sort by timestamp (older first)
+            key=lambda e: (e.priority, e.timestamp),  # Secondary sort by timestamp (older first)
         )
-        
+
         # Remove lowest priority experiences
         removed_count = 0
         for exp in sorted_experiences[:num_to_remove]:
             self._remove_experience(exp.experience_id)
             removed_count += 1
-        
+
         self._total_pruned += removed_count
         return removed_count
 
@@ -472,13 +473,13 @@ class ExperienceReplayBuffer:
         """Remove an experience from the buffer and all indices."""
         if experience_id not in self._experiences:
             return
-        
+
         exp = self._experiences[experience_id]
         task_type = exp.task_type
-        
+
         # Remove from main storage
         del self._experiences[experience_id]
-        
+
         # Remove from task type index
         if task_type in self._task_type_index:
             if experience_id in self._task_type_index[task_type]:
@@ -490,10 +491,10 @@ class ExperienceReplayBuffer:
     def get_experience(self, experience_id: str) -> Optional[Experience]:
         """
         Get an experience by ID.
-        
+
         Args:
             experience_id: ID of the experience to retrieve.
-            
+
         Returns:
             The experience if found, None otherwise.
         """
@@ -502,10 +503,10 @@ class ExperienceReplayBuffer:
     def get_experiences_by_task_type(self, task_type: str) -> List[Experience]:
         """
         Get all experiences of a specific task type.
-        
+
         Args:
             task_type: The task type to filter by.
-            
+
         Returns:
             List of experiences with the specified task type.
         """
@@ -555,10 +556,10 @@ class ExperienceReplayBuffer:
                 "avg_reward": 0.0,
                 "task_type_count": 0,
             }
-        
+
         priorities = [exp.priority for exp in self._experiences.values()]
         rewards = [exp.reward for exp in self._experiences.values()]
-        
+
         return {
             "count": len(self._experiences),
             "avg_priority": sum(priorities) / len(priorities),
@@ -572,10 +573,7 @@ class ExperienceReplayBuffer:
         """Serialize the experience replay buffer to a dictionary."""
         return {
             "config": self._config.to_dict(),
-            "experiences": {
-                exp_id: exp.to_dict()
-                for exp_id, exp in self._experiences.items()
-            },
+            "experiences": {exp_id: exp.to_dict() for exp_id, exp in self._experiences.items()},
             "total_stored": self._total_stored,
             "total_sampled": self._total_sampled,
             "total_pruned": self._total_pruned,
@@ -587,25 +585,25 @@ class ExperienceReplayBuffer:
         """Create an experience replay buffer from a dictionary."""
         config = data.get("config", {})
         buffer = cls(config=config)
-        
+
         # Restore experiences
         experiences_data = data.get("experiences", {})
         for exp_id, exp_data in experiences_data.items():
             exp = Experience.from_dict(exp_data)
             buffer._experiences[exp_id] = exp
-            
+
             # Rebuild task type index
             task_type = exp.task_type
             if task_type not in buffer._task_type_index:
                 buffer._task_type_index[task_type] = []
             buffer._task_type_index[task_type].append(exp_id)
-        
+
         # Restore statistics
         buffer._total_stored = data.get("total_stored", len(buffer._experiences))
         buffer._total_sampled = data.get("total_sampled", 0)
         buffer._total_pruned = data.get("total_pruned", 0)
         buffer._initialized_at = data.get("initialized_at", time.time())
-        
+
         return buffer
 
 
@@ -620,7 +618,7 @@ def create_experience(
 ) -> Experience:
     """
     Factory function to create an Experience with auto-generated ID.
-    
+
     Args:
         task_type: Type of task this experience relates to.
         context: Contextual information at the time of the experience.
@@ -629,7 +627,7 @@ def create_experience(
         reward: The reward received.
         priority: Priority score (defaults to 0.5).
         metadata: Additional metadata.
-        
+
     Returns:
         A new Experience instance.
     """

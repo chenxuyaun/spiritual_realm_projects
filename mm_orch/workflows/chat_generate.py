@@ -39,6 +39,7 @@ from mm_orch.logger import get_logger
 # Optional monitoring support
 try:
     from mm_orch.monitoring.otel_tracer import OTelTracer
+
     MONITORING_AVAILABLE = True
 except ImportError:
     MONITORING_AVAILABLE = False
@@ -169,7 +170,7 @@ class ChatGenerateWorkflow(BaseWorkflow):
         self.max_context_length = max_context_length
         self.use_real_models = use_real_models
         self.language = language
-        
+
         # Set default system prompt based on language
         if system_prompt:
             self.system_prompt = system_prompt
@@ -254,7 +255,7 @@ class ChatGenerateWorkflow(BaseWorkflow):
                 span = self.tracer.trace_workflow(
                     workflow_name="ChatGenerate",
                     session_id=session_id or "new",
-                    message_length=len(message)
+                    message_length=len(message),
                 ).__enter__()
             except Exception as e:
                 logger.warning(f"Failed to create workflow span: {e}")
@@ -288,7 +289,9 @@ class ChatGenerateWorkflow(BaseWorkflow):
                 return self._create_result(ctx, status="success")
 
             except Exception as e:
-                logger.error("ChatGenerate workflow failed", error=str(e), session_id=ctx.session_id)
+                logger.error(
+                    "ChatGenerate workflow failed", error=str(e), session_id=ctx.session_id
+                )
                 return self._create_result(
                     ctx, status="partial" if ctx.response else "failed", error=str(e)
                 )
@@ -586,20 +589,16 @@ class ChatGenerateWorkflow(BaseWorkflow):
             # If we have a conversation manager, use it to build proper prompt
             if self.conversation_manager:
                 prompt = self.conversation_manager.build_prompt(
-                    system_prompt=self.system_prompt,
-                    include_generation_prompt=True
+                    system_prompt=self.system_prompt, include_generation_prompt=True
                 )
             else:
                 prompt = context
 
             # Generate using inference engine
             from mm_orch.runtime.inference_engine import GenerationConfig
-            
+
             config = GenerationConfig(
-                max_new_tokens=512,
-                temperature=temperature,
-                top_p=0.9,
-                repetition_penalty=1.1
+                max_new_tokens=512, temperature=temperature, top_p=0.9, repetition_penalty=1.1
             )
 
             result = self.inference_engine.generate(prompt, config=config)
@@ -641,10 +640,11 @@ class ChatGenerateWorkflow(BaseWorkflow):
             # Create or reset conversation manager
             if self.conversation_manager is None:
                 from mm_orch.runtime.conversation import ConversationManager
+
                 self.conversation_manager = ConversationManager(
                     model_type=self.model_type,
                     max_history_tokens=self.max_context_length,
-                    system_prompt=system_prompt
+                    system_prompt=system_prompt,
                 )
             else:
                 self.conversation_manager.clear_history()
@@ -659,15 +659,14 @@ class ChatGenerateWorkflow(BaseWorkflow):
 
             # Build prompt
             ctx.context_text = self.conversation_manager.build_prompt(
-                system_prompt=system_prompt,
-                include_generation_prompt=True
+                system_prompt=system_prompt, include_generation_prompt=True
             )
 
             step.success = True
 
             logger.debug(
                 f"Built context with conversation manager: {len(ctx.context_text)} chars",
-                history_messages=len(ctx.history)
+                history_messages=len(ctx.history),
             )
 
         except Exception as e:

@@ -26,6 +26,7 @@ from mm_orch.logger import get_logger
 # Optional monitoring support
 try:
     from mm_orch.monitoring.otel_tracer import OTelTracer
+
     MONITORING_AVAILABLE = True
 except ImportError:
     MONITORING_AVAILABLE = False
@@ -197,9 +198,7 @@ class RAGQAWorkflow(BaseWorkflow):
         if self.tracer:
             try:
                 span = self.tracer.trace_workflow(
-                    workflow_name="RAGQA",
-                    query=query,
-                    top_k=top_k
+                    workflow_name="RAGQA", query=query, top_k=top_k
                 ).__enter__()
             except Exception as e:
                 logger.warning(f"Failed to create workflow span: {e}")

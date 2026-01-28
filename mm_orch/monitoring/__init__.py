@@ -7,14 +7,9 @@ from mm_orch.monitoring.performance_monitor import (
     LatencyRecord,
     ResourceSnapshot,
     PerformanceMetrics,
-    ResourceTrends
+    ResourceTrends,
 )
-from mm_orch.monitoring.anomaly_detector import (
-    AnomalyDetector,
-    Alert,
-    AlertSeverity,
-    AlertType
-)
+from mm_orch.monitoring.anomaly_detector import AnomalyDetector, Alert, AlertSeverity, AlertType
 
 __all__ = [
     "PrometheusExporter",
@@ -27,5 +22,5 @@ __all__ = [
     "AnomalyDetector",
     "Alert",
     "AlertSeverity",
-    "AlertType"
+    "AlertType",
 ]

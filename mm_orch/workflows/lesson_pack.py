@@ -478,9 +478,7 @@ Teaching Plan:"""
         # Fallback: generate template-based plan
         return self._generate_template_plan(topic, difficulty, language)
 
-    def _generate_plan_with_real_model(
-        self, topic: str, difficulty: str, language: str
-    ) -> str:
+    def _generate_plan_with_real_model(self, topic: str, difficulty: str, language: str) -> str:
         """
         Generate teaching plan using real model via InferenceEngine.
 
@@ -496,23 +494,16 @@ Teaching Plan:"""
             # Select prompt template based on language
             if language == "zh":
                 prompt = LESSON_PLAN_PROMPT_ZH.format(
-                    topic=topic,
-                    difficulty=self._translate_difficulty(difficulty, language)
+                    topic=topic, difficulty=self._translate_difficulty(difficulty, language)
                 )
             else:
-                prompt = LESSON_PLAN_PROMPT_EN.format(
-                    topic=topic,
-                    difficulty=difficulty
-                )
+                prompt = LESSON_PLAN_PROMPT_EN.format(topic=topic, difficulty=difficulty)
 
             # Generate using inference engine
             from mm_orch.runtime.inference_engine import GenerationConfig
-            
+
             config = GenerationConfig(
-                max_new_tokens=800,
-                temperature=0.7,
-                top_p=0.9,
-                repetition_penalty=1.1
+                max_new_tokens=800, temperature=0.7, top_p=0.9, repetition_penalty=1.1
             )
 
             result = self.inference_engine.generate(prompt, config=config)
@@ -675,12 +666,7 @@ Explanation:"""
         return self._generate_template_explanation(topic, difficulty, language, include_examples)
 
     def _generate_explanation_with_real_model(
-        self,
-        topic: str,
-        plan: str,
-        difficulty: str,
-        language: str,
-        include_examples: bool
+        self, topic: str, plan: str, difficulty: str, language: str, include_examples: bool
     ) -> str:
         """
         Generate explanation using real model via InferenceEngine.
@@ -701,7 +687,9 @@ Explanation:"""
                 if language == "zh":
                     example_instruction = "- 在适当的地方加入具体的例子来帮助理解"
                 else:
-                    example_instruction = "- Include specific examples where appropriate to aid understanding"
+                    example_instruction = (
+                        "- Include specific examples where appropriate to aid understanding"
+                    )
             else:
                 example_instruction = ""
 
@@ -711,24 +699,21 @@ Explanation:"""
                     topic=topic,
                     plan=plan[:1000],
                     difficulty=self._translate_difficulty(difficulty, language),
-                    example_instruction=example_instruction
+                    example_instruction=example_instruction,
                 )
             else:
                 prompt = LESSON_EXPLANATION_PROMPT_EN.format(
                     topic=topic,
                     plan=plan[:1000],
                     difficulty=difficulty,
-                    example_instruction=example_instruction
+                    example_instruction=example_instruction,
                 )
 
             # Generate using inference engine
             from mm_orch.runtime.inference_engine import GenerationConfig
-            
+
             config = GenerationConfig(
-                max_new_tokens=1500,
-                temperature=0.7,
-                top_p=0.9,
-                repetition_penalty=1.1
+                max_new_tokens=1500, temperature=0.7, top_p=0.9, repetition_penalty=1.1
             )
 
             result = self.inference_engine.generate(prompt, config=config)
@@ -919,11 +904,7 @@ Exercises:"""
         return self._generate_template_exercises(topic, difficulty, num_exercises, language)
 
     def _generate_exercises_with_real_model(
-        self,
-        topic: str,
-        difficulty: str,
-        num_exercises: int,
-        language: str
+        self, topic: str, difficulty: str, num_exercises: int, language: str
     ) -> List[Dict[str, str]]:
         """
         Generate exercises using real model via InferenceEngine.
@@ -943,23 +924,18 @@ Exercises:"""
                 prompt = LESSON_EXERCISES_PROMPT_ZH.format(
                     topic=topic,
                     num_exercises=num_exercises,
-                    difficulty=self._translate_difficulty(difficulty, language)
+                    difficulty=self._translate_difficulty(difficulty, language),
                 )
             else:
                 prompt = LESSON_EXERCISES_PROMPT_EN.format(
-                    topic=topic,
-                    num_exercises=num_exercises,
-                    difficulty=difficulty
+                    topic=topic, num_exercises=num_exercises, difficulty=difficulty
                 )
 
             # Generate using inference engine
             from mm_orch.runtime.inference_engine import GenerationConfig
-            
+
             config = GenerationConfig(
-                max_new_tokens=1000,
-                temperature=0.8,
-                top_p=0.9,
-                repetition_penalty=1.1
+                max_new_tokens=1000, temperature=0.8, top_p=0.9, repetition_penalty=1.1
             )
 
             result = self.inference_engine.generate(prompt, config=config)
@@ -999,14 +975,14 @@ Exercises:"""
         content = content.strip()
 
         # Ensure headers have proper spacing
-        content = re.sub(r'(#{1,6})([^\s#])', r'\1 \2', content)
+        content = re.sub(r"(#{1,6})([^\s#])", r"\1 \2", content)
 
         # Ensure list items have proper spacing
-        content = re.sub(r'^(\s*[-*+])([^\s])', r'\1 \2', content, flags=re.MULTILINE)
-        content = re.sub(r'^(\s*\d+\.)([^\s])', r'\1 \2', content, flags=re.MULTILINE)
+        content = re.sub(r"^(\s*[-*+])([^\s])", r"\1 \2", content, flags=re.MULTILINE)
+        content = re.sub(r"^(\s*\d+\.)([^\s])", r"\1 \2", content, flags=re.MULTILINE)
 
         # Remove excessive blank lines (more than 2)
-        content = re.sub(r'\n{4,}', '\n\n\n', content)
+        content = re.sub(r"\n{4,}", "\n\n\n", content)
 
         # Remove any generation artifacts
         stop_markers = [

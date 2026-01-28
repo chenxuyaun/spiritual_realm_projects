@@ -62,43 +62,37 @@ class ConsciousnessCore:
 
         # Initialize curriculum learning layer
         self.curriculum = CurriculumLearningSystem(
-            development_system=self.development,
-            config=config.get("curriculum", {})
+            development_system=self.development, config=config.get("curriculum", {})
         )
         self.intrinsic_motivation = IntrinsicMotivationEngine(
             config=config.get("intrinsic_motivation", {})
         )
         self.experience_replay = ExperienceReplayBuffer(
             max_size=config.get("experience_replay", {}).get("max_size", 10000),
-            config=config.get("experience_replay", {})
+            config=config.get("experience_replay", {}),
         )
 
         # Initialize dual memory layer
         self.episodic_memory = EpisodicMemory(
             max_episodes=config.get("episodic_memory", {}).get("max_episodes", 5000),
-            config=config.get("episodic_memory", {})
+            config=config.get("episodic_memory", {}),
         )
-        self.semantic_memory = SemanticMemory(
-            config=config.get("semantic_memory", {})
-        )
+        self.semantic_memory = SemanticMemory(config=config.get("semantic_memory", {}))
         self.symbol_grounding = SymbolGroundingModule(
             episodic_memory=self.episodic_memory,
             semantic_memory=self.semantic_memory,
-            config=config.get("symbol_grounding", {})
+            config=config.get("symbol_grounding", {}),
         )
 
         # Initialize enhanced emotion layer
-        self.pad_emotion = PADEmotionModel(
-            config=config.get("pad_emotion", {})
-        )
+        self.pad_emotion = PADEmotionModel(config=config.get("pad_emotion", {}))
         self.cognitive_appraisal = CognitiveAppraisalSystem(
             motivation_system=self.motivation,
             self_model=self.self_model,
-            config=config.get("cognitive_appraisal", {})
+            config=config.get("cognitive_appraisal", {}),
         )
         self.decision_modulator = DecisionModulator(
-            pad_model=self.pad_emotion,
-            config=config.get("decision_modulator", {})
+            pad_model=self.pad_emotion, config=config.get("decision_modulator", {})
         )
 
         self._initialized_at: float = time.time()
@@ -128,28 +122,18 @@ class ConsciousnessCore:
                     for dim in CapabilityDimension
                 }
             },
-            "intrinsic_motivation": {
-                "active": True
-            },
+            "intrinsic_motivation": {"active": True},
             "experience_replay": {
                 "size": len(self.experience_replay._experiences),
-                "task_distribution": self.experience_replay.get_task_type_distribution()
+                "task_distribution": self.experience_replay.get_task_type_distribution(),
             },
             # Dual memory layer
-            "episodic_memory": {
-                "episode_count": len(self.episodic_memory._episodes)
-            },
-            "semantic_memory": {
-                "concept_count": len(self.semantic_memory.knowledge_graph._nodes)
-            },
-            "symbol_grounding": {
-                "grounded_symbols": len(self.symbol_grounding._groundings)
-            },
+            "episodic_memory": {"episode_count": len(self.episodic_memory._episodes)},
+            "semantic_memory": {"concept_count": len(self.semantic_memory.knowledge_graph._nodes)},
+            "symbol_grounding": {"grounded_symbols": len(self.symbol_grounding._groundings)},
             # Enhanced emotion layer
             "pad_emotion": self.pad_emotion.get_state().to_dict(),
-            "decision_modulator": {
-                "modifiers": self.decision_modulator.get_modifiers().__dict__
-            },
+            "decision_modulator": {"modifiers": self.decision_modulator.get_modifiers().__dict__},
             # System info
             "uptime": time.time() - self._initialized_at,
         }
@@ -166,10 +150,7 @@ class ConsciousnessCore:
 
         # Route event to cognitive appraisal and PAD emotion system
         # Convert SystemEvent to dict format expected by cognitive appraisal
-        event_dict = {
-            "type": event_type,
-            **data
-        }
+        event_dict = {"type": event_type, **data}
         appraisal_result = self.cognitive_appraisal.appraise_event(event_dict, context=data)
         pad_delta = appraisal_result.to_pad_delta()
         self.pad_emotion.update_state(**pad_delta)
@@ -271,7 +252,7 @@ class ConsciousnessCore:
             events=[{"type": "task_execution", "task_type": task_type}],
             emotional_state=self.pad_emotion.get_state().to_dict(),
             importance=0.7 if success else 0.9,  # Failures are more important
-            metadata={"task_id": task_id, "success": success, "score": score}
+            metadata={"task_id": task_id, "success": success, "score": score},
         )
 
     def _handle_task_error(self, data: Dict[str, Any]) -> None:
@@ -301,7 +282,7 @@ class ConsciousnessCore:
             events=[{"type": "task_error", "task_type": task_type, "error": error_type}],
             emotional_state=self.pad_emotion.get_state().to_dict(),
             importance=0.95,  # Errors are very important for learning
-            metadata={"task_id": task_id, "error_type": error_type}
+            metadata={"task_id": task_id, "error_type": error_type},
         )
 
         # Store high-priority experience for learning from errors
@@ -344,7 +325,7 @@ class ConsciousnessCore:
                 events=[{"type": "user_feedback", "feedback": feedback}],
                 emotional_state=self.pad_emotion.get_state().to_dict(),
                 importance=0.8,  # User feedback is important
-                metadata={"user_id": user_id, "feedback": feedback}
+                metadata={"user_id": user_id, "feedback": feedback},
             )
 
     def _handle_resource_update(self, data: Dict[str, Any]) -> None:
@@ -375,15 +356,15 @@ class ConsciousnessCore:
         if key and value is not None:
             # Update existing world model
             self.world_model.update_knowledge(domain, key, value)
-            
+
             # Integrate into semantic memory
             knowledge_data = {
                 "concept": key,
                 "attributes": {"value": value, "domain": domain},
-                "source": "knowledge_update"
+                "source": "knowledge_update",
             }
             self.semantic_memory.integrate_knowledge(knowledge_data, source="world_model")
-            
+
             self.emotion.process_event("learning_progress", source="knowledge_system")
 
     def get_strategy_suggestion(self, task: Task) -> StrategySuggestion:
@@ -440,8 +421,7 @@ class ConsciousnessCore:
 
         # Calculate intrinsic motivation exploration bonus
         exploration_bonus = self.intrinsic_motivation.get_exploration_bonus(
-            action=task_type,
-            context={"task": task}
+            action=task_type, context={"task": task}
         )
 
         # Enhance suggestion parameters
@@ -697,7 +677,7 @@ class ConsciousnessCore:
             self.emotion.from_dict(data["emotion"])
         if "development" in data:
             self.development.from_dict(data["development"])
-        
+
         # Curriculum learning layer
         if "curriculum" in data:
             self.curriculum.from_dict(data["curriculum"])
@@ -705,7 +685,7 @@ class ConsciousnessCore:
             self.intrinsic_motivation.from_dict(data["intrinsic_motivation"])
         if "experience_replay" in data:
             self.experience_replay.from_dict(data["experience_replay"])
-        
+
         # Dual memory layer
         if "episodic_memory" in data:
             self.episodic_memory.load_state(data["episodic_memory"])
@@ -713,7 +693,7 @@ class ConsciousnessCore:
             self.semantic_memory.from_dict(data["semantic_memory"])
         if "symbol_grounding" in data:
             self.symbol_grounding.from_dict(data["symbol_grounding"])
-        
+
         # Enhanced emotion layer
         if "pad_emotion" in data:
             self.pad_emotion.from_dict(data["pad_emotion"])
@@ -721,7 +701,7 @@ class ConsciousnessCore:
             self.cognitive_appraisal.from_dict(data["cognitive_appraisal"])
         if "decision_modulator" in data:
             self.decision_modulator.from_dict(data["decision_modulator"])
-        
+
         # System metadata
         if "initialized_at" in data:
             self._initialized_at = data["initialized_at"]

@@ -28,6 +28,7 @@ from mm_orch.logger import get_logger
 # Optional monitoring support
 try:
     from mm_orch.monitoring.otel_tracer import OTelTracer
+
     MONITORING_AVAILABLE = True
 except ImportError:
     MONITORING_AVAILABLE = False
@@ -247,9 +248,7 @@ class SearchQAWorkflow(BaseWorkflow):
         if self.tracer:
             try:
                 span = self.tracer.trace_workflow(
-                    workflow_name="SearchQA",
-                    query=query,
-                    max_results=max_results
+                    workflow_name="SearchQA", query=query, max_results=max_results
                 ).__enter__()
             except Exception as e:
                 logger.warning(f"Failed to create workflow span: {e}")
@@ -265,7 +264,9 @@ class SearchQAWorkflow(BaseWorkflow):
 
                 # Check if we have any results
                 if not ctx.search_results:
-                    return self._create_result(ctx, status="partial", error="No search results found")
+                    return self._create_result(
+                        ctx, status="partial", error="No search results found"
+                    )
 
                 # Step 2: Fetch content
                 ctx = self._step_fetch(ctx)
@@ -651,24 +652,15 @@ Answer:"""
         try:
             # Select prompt template based on language
             if self.language == "zh":
-                prompt = SEARCH_QA_PROMPT_TEMPLATE_ZH.format(
-                    context=context,
-                    query=query
-                )
+                prompt = SEARCH_QA_PROMPT_TEMPLATE_ZH.format(context=context, query=query)
             else:
-                prompt = SEARCH_QA_PROMPT_TEMPLATE.format(
-                    context=context,
-                    query=query
-                )
+                prompt = SEARCH_QA_PROMPT_TEMPLATE.format(context=context, query=query)
 
             # Generate using inference engine
             from mm_orch.runtime.inference_engine import GenerationConfig
-            
+
             config = GenerationConfig(
-                max_new_tokens=512,
-                temperature=0.7,
-                top_p=0.9,
-                repetition_penalty=1.1
+                max_new_tokens=512, temperature=0.7, top_p=0.9, repetition_penalty=1.1
             )
 
             result = self.inference_engine.generate(prompt, config=config)

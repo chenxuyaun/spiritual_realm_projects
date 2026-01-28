@@ -18,6 +18,7 @@ from mm_orch.schemas import ModelConfig
 # Optional optimization support
 try:
     from mm_orch.optimization.manager import OptimizationManager, InferenceResult
+
     OPTIMIZATION_AVAILABLE = True
 except ImportError:
     OPTIMIZATION_AVAILABLE = False
@@ -28,6 +29,7 @@ except ImportError:
 @dataclass
 class ModelUsageStats:
     """Usage statistics for a loaded model."""
+
     load_count: int = 0
     last_used: float = 0.0
     total_inference_time: float = 0.0
@@ -97,7 +99,7 @@ class ModelManager:
         # Optimization support (Requirement 13.1, 13.3, 13.4)
         self.optimization_manager = optimization_manager
         self.enable_optimization = enable_optimization and OPTIMIZATION_AVAILABLE
-        
+
         if enable_optimization and not OPTIMIZATION_AVAILABLE:
             self._logger.warning(
                 "Optimization requested but optimization module not available. "
@@ -238,7 +240,7 @@ class ModelManager:
     def _load_model_from_path(self, config: ModelConfig, device: str) -> Tuple[Any, Any]:
         """
         从路径加载模型和分词器
-        
+
         Requirement 6.3: Support 8-bit and 4-bit quantization using bitsandbytes
 
         Args:
@@ -278,7 +280,7 @@ class ModelManager:
                         # 尝试导入bitsandbytes
                         import bitsandbytes as bnb
                         from transformers import BitsAndBytesConfig
-                        
+
                         if config.quantization == "8bit":
                             # 8-bit quantization configuration
                             quantization_config = BitsAndBytesConfig(
@@ -288,9 +290,9 @@ class ModelManager:
                             load_kwargs["quantization_config"] = quantization_config
                             self._logger.info(
                                 f"Applying 8-bit quantization for {config.name}",
-                                context={"device": device}
+                                context={"device": device},
                             )
-                            
+
                         elif config.quantization == "4bit":
                             # 4-bit quantization configuration
                             quantization_config = BitsAndBytesConfig(
@@ -302,21 +304,21 @@ class ModelManager:
                             load_kwargs["quantization_config"] = quantization_config
                             self._logger.info(
                                 f"Applying 4-bit quantization for {config.name}",
-                                context={"device": device}
+                                context={"device": device},
                             )
-                    
+
                     except ImportError:
                         # Fallback: bitsandbytes not available
                         self._logger.warning(
                             f"bitsandbytes not available, loading {config.name} without quantization",
-                            context={"requested_quantization": config.quantization}
+                            context={"requested_quantization": config.quantization},
                         )
-                    
+
                     except Exception as e:
                         # Fallback: quantization configuration failed
                         self._logger.warning(
                             f"Failed to configure quantization for {config.name}: {e}, falling back to standard loading",
-                            context={"requested_quantization": config.quantization}
+                            context={"requested_quantization": config.quantization},
                         )
             else:
                 load_kwargs["device_map"] = "cpu"
@@ -324,7 +326,7 @@ class ModelManager:
             # 尝试加载模型 - with fallback if quantization fails
             model = None
             load_error = None
-            
+
             # First attempt: with quantization if configured
             try:
                 model = AutoModelForCausalLM.from_pretrained(model_path, **load_kwargs)
@@ -336,23 +338,25 @@ class ModelManager:
                     load_error = None
                 except Exception:
                     pass
-            
+
             # Fallback: if quantization failed, try without it
             if model is None and "quantization_config" in load_kwargs:
                 self._logger.warning(
                     f"Quantized loading failed for {config.name}, retrying without quantization",
-                    context={"error": str(load_error)}
+                    context={"error": str(load_error)},
                 )
-                
+
                 # Remove quantization config and retry
-                load_kwargs_fallback = {k: v for k, v in load_kwargs.items() if k != "quantization_config"}
-                
+                load_kwargs_fallback = {
+                    k: v for k, v in load_kwargs.items() if k != "quantization_config"
+                }
+
                 try:
                     model = AutoModelForCausalLM.from_pretrained(model_path, **load_kwargs_fallback)
                 except Exception:
                     # Final fallback to AutoModel
                     model = AutoModel.from_pretrained(model_path, **load_kwargs_fallback)
-            
+
             # If still no model, raise the original error
             if model is None:
                 raise load_error or ModelError(f"Failed to load model {config.name}")
@@ -393,12 +397,12 @@ class ModelManager:
             cached.update_usage()
             # 移动到OrderedDict末尾（最近使用）
             self._cache.move_to_end(model_name)
-            
+
             # 更新使用统计 - Requirement 6.1: increment usage counter on load
             if model_name in self._usage_stats:
                 self._usage_stats[model_name].load_count += 1
                 self._usage_stats[model_name].last_used = time.time()
-            
+
             self._logger.debug(
                 f"Model retrieved from cache: {model_name}", context={"use_count": cached.use_count}
             )
@@ -440,13 +444,13 @@ class ModelManager:
             self._usage_stats[model_name] = ModelUsageStats()
         self._usage_stats[model_name].load_count += 1
         self._usage_stats[model_name].last_used = time.time()
-        
+
         # 记录VRAM峰值
         if target_device == "cuda":
             used_vram, _ = self._get_gpu_memory_info()
             self._usage_stats[model_name].peak_vram_mb = max(
                 self._usage_stats[model_name].peak_vram_mb,
-                int(used_vram * 1024)  # Convert GB to MB
+                int(used_vram * 1024),  # Convert GB to MB
             )
 
         self._logger.info(
@@ -512,21 +516,21 @@ class ModelManager:
     def cleanup_stale(self) -> List[str]:
         """
         清理过期模型（超过residency_seconds未使用的模型）
-        
+
         Requirement 6.2: Mark models not used for 30 seconds as eligible for unloading
-        
+
         Returns:
             被卸载的模型名称列表
         """
         now = time.time()
         to_unload = []
-        
+
         # 找出所有过期的模型
         for model_name in list(self._cache.keys()):
             cached = self._cache[model_name]
             if now - cached.last_used > self.residency_seconds:
                 to_unload.append(model_name)
-        
+
         # 卸载过期模型
         unloaded = []
         for model_name in to_unload:
@@ -535,79 +539,83 @@ class ModelManager:
                 self._logger.info(
                     f"Cleaned up stale model: {model_name}",
                     context={
-                        "idle_time": now - self._cache.get(model_name, CachedModel(None, None, None, "", 0, now, 0)).last_used if model_name in self._cache else 0
-                    }
+                        "idle_time": (
+                            now
+                            - self._cache.get(
+                                model_name, CachedModel(None, None, None, "", 0, now, 0)
+                            ).last_used
+                            if model_name in self._cache
+                            else 0
+                        )
+                    },
                 )
-        
+
         return unloaded
 
     def _calculate_model_priority(self, model_name: str) -> float:
         """
         计算模型优先级用于内存竞争时的保留决策
-        
+
         Requirement 6.4: Prioritize based on usage patterns and device policy
-        
+
         优先级计算考虑:
         - 使用频率 (load_count)
         - 最近使用时间 (last_used)
         - 设备策略 (preferred_device_policy from config)
-        
+
         Returns:
             优先级分数（越高越重要）
         """
         if model_name not in self._cache:
             return 0.0
-        
+
         cached = self._cache[model_name]
         stats = self._usage_stats.get(model_name, ModelUsageStats())
-        
+
         # 基础分数：使用次数
         priority = float(stats.load_count)
-        
+
         # 时间衰减：最近使用的模型优先级更高
         now = time.time()
         time_since_use = now - cached.last_used
         time_factor = 1.0 / (1.0 + time_since_use / 60.0)  # 1分钟衰减
         priority *= time_factor
-        
+
         # 设备策略加权
         config = self._model_configs.get(model_name)
         if config:
             # 从config中获取device_policy（如果有的话）
-            device_policy = getattr(config, 'device_policy', 'gpu_on_demand')
-            if device_policy == 'gpu_resident':
+            device_policy = getattr(config, "device_policy", "gpu_on_demand")
+            if device_policy == "gpu_resident":
                 priority *= 2.0  # GPU常驻模型优先级翻倍
-            elif device_policy == 'cpu_only':
+            elif device_policy == "cpu_only":
                 priority *= 0.5  # CPU模型优先级降低
-        
+
         return priority
 
     def _evict_by_priority(self) -> Optional[str]:
         """
         根据优先级淘汰模型
-        
+
         Requirement 6.4: Prioritize based on usage patterns and device policy
-        
+
         Returns:
             被淘汰的模型名称，如果没有则返回None
         """
         if not self._cache:
             return None
-        
+
         # 计算所有模型的优先级
-        priorities = {
-            name: self._calculate_model_priority(name)
-            for name in self._cache.keys()
-        }
-        
+        priorities = {name: self._calculate_model_priority(name) for name in self._cache.keys()}
+
         # 选择优先级最低的模型
         lowest_priority_model = min(priorities.items(), key=lambda x: x[1])[0]
-        
+
         self._logger.info(
             f"Evicting model by priority: {lowest_priority_model}",
-            context={"priority": priorities[lowest_priority_model]}
+            context={"priority": priorities[lowest_priority_model]},
         )
-        
+
         self.unload_model(lowest_priority_model)
         return lowest_priority_model
 
@@ -649,24 +657,24 @@ class ModelManager:
                 self._logger.warning(
                     f"Optimization inference failed, falling back to standard: {e}"
                 )
-        
+
         # Standard inference path (backward compatible)
         return self._infer_standard(model_name, inputs, **kwargs)
-    
+
     def _infer_with_optimization(
         self, model_name: str, inputs: Union[str, List[str]], **kwargs
     ) -> Any:
         """
         Execute inference using OptimizationManager.
-        
+
         Args:
             model_name: Model identifier
             inputs: Input text or list of texts
             **kwargs: Additional generation parameters
-            
+
         Returns:
             Model output
-            
+
         Raises:
             ModelError: If inference fails
         """
@@ -675,7 +683,7 @@ class ModelManager:
             prompts = [inputs]
         else:
             prompts = inputs
-        
+
         # Build inference inputs
         inference_inputs = {
             "prompts": prompts,
@@ -683,41 +691,41 @@ class ModelManager:
                 "max_new_tokens": kwargs.get("max_new_tokens", 256),
                 "temperature": kwargs.get("temperature", 0.7),
                 "do_sample": kwargs.get("do_sample", True),
-            }
+            },
         }
-        
+
         # Execute with optimization manager
         result: InferenceResult = self.optimization_manager.infer(
             model_name=model_name,
             inputs=inference_inputs,
-            engine_preference=kwargs.get("engine_preference")
+            engine_preference=kwargs.get("engine_preference"),
         )
-        
+
         # Extract outputs from result
         outputs = result.outputs.get("outputs", [])
-        
+
         # Return single output or list based on input
         if isinstance(inputs, str) and len(outputs) == 1:
             return outputs[0]
         return outputs
-    
+
     def _infer_standard(self, model_name: str, inputs: Union[str, List[str]], **kwargs) -> Any:
         """
         Execute standard inference (original implementation).
-        
+
         Args:
             model_name: Model identifier
             inputs: Input text or list of texts
             **kwargs: Additional generation parameters
-            
+
         Returns:
             Model output
-            
+
         Raises:
             ModelError: If inference fails
         """
         cached = self.get_model(model_name)
-        
+
         # 记录推理开始时间
         inference_start = time.time()
 
@@ -765,20 +773,20 @@ class ModelManager:
 
             # 更新使用统计
             cached.update_usage()
-            
+
             # 记录推理时间
             inference_time = time.time() - inference_start
             if model_name in self._usage_stats:
                 self._usage_stats[model_name].total_inference_time += inference_time
                 self._usage_stats[model_name].last_used = time.time()
-            
+
             # 更新VRAM峰值
             if cached.device == "cuda":
                 used_vram, _ = self._get_gpu_memory_info()
                 if model_name in self._usage_stats:
                     self._usage_stats[model_name].peak_vram_mb = max(
                         self._usage_stats[model_name].peak_vram_mb,
-                        int(used_vram * 1024)  # Convert GB to MB
+                        int(used_vram * 1024),  # Convert GB to MB
                     )
 
             return decoded[0] if len(decoded) == 1 else decoded
@@ -877,10 +885,10 @@ class ModelManager:
     def get_usage_stats(self, model_name: str) -> ModelUsageStats:
         """
         获取模型使用统计
-        
+
         Args:
             model_name: 模型标识符
-            
+
         Returns:
             ModelUsageStats对象，如果模型未加载过则返回默认值
         """
@@ -916,7 +924,9 @@ class ModelManager:
 _global_model_manager: Optional[ModelManager] = None
 
 
-def get_model_manager(max_cached_models: int = 3, default_device: str = "auto", residency_seconds: int = 30) -> ModelManager:
+def get_model_manager(
+    max_cached_models: int = 3, default_device: str = "auto", residency_seconds: int = 30
+) -> ModelManager:
     """
     获取全局模型管理器实例
 
@@ -932,18 +942,18 @@ def get_model_manager(max_cached_models: int = 3, default_device: str = "auto", 
 
     if _global_model_manager is None:
         _global_model_manager = ModelManager(
-            max_cached_models=max_cached_models, 
+            max_cached_models=max_cached_models,
             default_device=default_device,
             residency_seconds=residency_seconds,
-            enable_optimization=False  # Default to disabled for backward compatibility
+            enable_optimization=False,  # Default to disabled for backward compatibility
         )
 
     return _global_model_manager
 
 
 def configure_model_manager(
-    max_cached_models: int = 3, 
-    default_device: str = "auto", 
+    max_cached_models: int = 3,
+    default_device: str = "auto",
     enable_quantization: bool = True,
     residency_seconds: int = 30,
     optimization_manager: Optional[Any] = None,

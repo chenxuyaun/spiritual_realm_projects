@@ -718,7 +718,7 @@ async def list_models(request: Request, api_key: str = Depends(verify_api_key)):
         # 读取模型配置
         config_path = Path("config/models.yaml")
         available_models = {}
-        
+
         if config_path.exists():
             with open(config_path, "r", encoding="utf-8") as f:
                 config = yaml.safe_load(f)
@@ -728,6 +728,7 @@ async def list_models(request: Request, api_key: str = Depends(verify_api_key)):
         loaded_models = []
         try:
             from mm_orch.runtime.real_model_manager import RealModelManager
+
             # 这里可以添加获取已加载模型的逻辑
         except ImportError:
             pass
@@ -773,9 +774,7 @@ async def list_models(request: Request, api_key: str = Depends(verify_api_key)):
         404: {"model": ErrorResponse, "description": "模型不存在"},
     },
 )
-async def get_model_info(
-    request: Request, model_name: str, api_key: str = Depends(verify_api_key)
-):
+async def get_model_info(request: Request, model_name: str, api_key: str = Depends(verify_api_key)):
     """
     获取模型详细信息
     """
@@ -787,7 +786,7 @@ async def get_model_info(
 
         # 读取模型配置
         config_path = Path("config/models.yaml")
-        
+
         if not config_path.exists():
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -808,7 +807,10 @@ async def get_model_info(
                 status_code=status.HTTP_404_NOT_FOUND,
                 content={
                     "success": False,
-                    "error": {"code": "MODEL_NOT_FOUND", "message": f"Model '{model_name}' not found"},
+                    "error": {
+                        "code": "MODEL_NOT_FOUND",
+                        "message": f"Model '{model_name}' not found",
+                    },
                     "timestamp": time.time(),
                     "request_id": request_id,
                 },
@@ -856,7 +858,7 @@ async def run_benchmark(
     request: Request,
     model_name: str = "gpt2",
     test_types: Optional[List[str]] = None,
-    api_key: str = Depends(verify_api_key)
+    api_key: str = Depends(verify_api_key),
 ):
     """
     运行基准测试
@@ -887,9 +889,7 @@ async def run_benchmark(
             try:
                 latency_bench = LatencyBenchmark()
                 latency_result = latency_bench.run_benchmark(
-                    model_name=model_name,
-                    test_prompts=["Hello, how are you?"],
-                    num_runs=3
+                    model_name=model_name, test_prompts=["Hello, how are you?"], num_runs=3
                 )
                 results["latency"] = latency_result.metrics
             except Exception as e:
@@ -909,9 +909,7 @@ async def run_benchmark(
             try:
                 throughput_bench = ThroughputBenchmark()
                 throughput_result = throughput_bench.run_benchmark(
-                    model_name=model_name,
-                    num_requests=3,
-                    concurrent_levels=[1]
+                    model_name=model_name, num_requests=3, concurrent_levels=[1]
                 )
                 results["throughput"] = throughput_result.metrics
             except Exception as e:

@@ -30,6 +30,7 @@ from mm_orch.consciousness.episodic_memory import Episode
 
 class ConflictResolutionStrategy(Enum):
     """Strategies for resolving knowledge conflicts."""
+
     NEWEST_WINS = "newest_wins"  # Most recent information takes precedence
     HIGHEST_CONFIDENCE = "highest_confidence"  # Higher confidence wins
     MERGE = "merge"  # Attempt to merge both pieces of information
@@ -38,6 +39,7 @@ class ConflictResolutionStrategy(Enum):
 @dataclass
 class ConflictInfo:
     """Information about a detected knowledge conflict."""
+
     conflict_id: str
     existing_node_id: str
     existing_value: Any
@@ -79,12 +81,13 @@ class ConflictInfo:
 class IntegrationResult:
     """
     Result of knowledge integration operation.
-    
+
     Tracks what was created, updated, and any conflicts encountered
     during the integration of new knowledge.
-    
+
     Validates: Requirements 4.2
     """
+
     new_concepts: List[str]  # IDs of newly created concepts
     updated_concepts: List[str]  # IDs of updated concepts
     new_relationships: List[str]  # IDs of newly created relationships
@@ -126,12 +129,13 @@ class IntegrationResult:
 class ExtractionResult:
     """
     Result of pattern extraction from episodes.
-    
+
     Tracks concepts and relationships extracted from episodic memory
     and integrated into semantic memory.
-    
+
     Validates: Requirements 4.4
     """
+
     extracted_concepts: List[str]  # Names of concepts extracted
     extracted_relationships: List[Tuple[str, str, str]]  # (source, type, target)
     integration_result: Optional[IntegrationResult] = None
@@ -144,7 +148,9 @@ class ExtractionResult:
         return {
             "extracted_concepts": self.extracted_concepts.copy(),
             "extracted_relationships": [list(r) for r in self.extracted_relationships],
-            "integration_result": self.integration_result.to_dict() if self.integration_result else None,
+            "integration_result": (
+                self.integration_result.to_dict() if self.integration_result else None
+            ),
             "episodes_processed": self.episodes_processed,
             "patterns_found": self.patterns_found,
             "timestamp": self.timestamp,
@@ -168,12 +174,13 @@ class ExtractionResult:
 class ConsolidationResult:
     """
     Result of semantic memory consolidation.
-    
+
     Tracks merging, strengthening, and pruning operations performed
     during consolidation.
-    
+
     Validates: Requirements 4.4
     """
+
     merged_concepts: List[Tuple[str, str]]  # Pairs of (kept_id, removed_id)
     strengthened_relationships: List[str]  # IDs of strengthened relationships
     pruned_concepts: List[str]  # IDs of removed concepts
@@ -208,6 +215,7 @@ class ConsolidationResult:
 @dataclass
 class SemanticMemoryConfig:
     """Configuration for the semantic memory system."""
+
     conflict_resolution_strategy: str = "newest_wins"  # Default strategy
     similarity_threshold: float = 0.8  # Threshold for concept similarity
     min_relationship_strength: float = 0.1  # Minimum strength to retain
@@ -221,7 +229,9 @@ class SemanticMemoryConfig:
         """Validate configuration values."""
         valid_strategies = ["newest_wins", "highest_confidence", "merge"]
         if self.conflict_resolution_strategy not in valid_strategies:
-            raise ValueError(f"Invalid conflict_resolution_strategy: {self.conflict_resolution_strategy}")
+            raise ValueError(
+                f"Invalid conflict_resolution_strategy: {self.conflict_resolution_strategy}"
+            )
         if not (0.0 <= self.similarity_threshold <= 1.0):
             raise ValueError("similarity_threshold must be between 0.0 and 1.0")
         if not (0.0 <= self.min_relationship_strength <= 1.0):
@@ -268,7 +278,7 @@ class SemanticMemoryConfig:
 class SemanticMemory:
     """
     Manages semantic memory with knowledge graph.
-    
+
     This class wraps the KnowledgeGraph and provides higher-level operations
     for knowledge management including:
     - Knowledge integration with conflict detection and resolution
@@ -276,14 +286,14 @@ class SemanticMemory:
     - Pattern extraction from episodic memory
     - Consolidation (merging, strengthening, pruning)
     - Serialization/deserialization for persistence
-    
+
     Requirements: 4.2, 4.4, 4.5, 4.6
     """
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize semantic memory.
-        
+
         Args:
             config: Optional configuration dictionary.
         """
@@ -291,10 +301,10 @@ class SemanticMemory:
             self._config = SemanticMemoryConfig.from_dict(config)
         else:
             self._config = SemanticMemoryConfig()
-        
+
         # Initialize the underlying knowledge graph
         self._knowledge_graph = KnowledgeGraph()
-        
+
         # Statistics tracking
         self._total_integrations: int = 0
         self._total_conflicts: int = 0
@@ -317,11 +327,11 @@ class SemanticMemory:
     ) -> IntegrationResult:
         """
         Integrate new knowledge into the semantic memory.
-        
+
         This method processes incoming knowledge, detects conflicts with
         existing knowledge, resolves conflicts using the configured strategy,
         and updates the knowledge graph accordingly.
-        
+
         Args:
             knowledge: Dictionary containing knowledge to integrate.
                 Expected keys:
@@ -330,10 +340,10 @@ class SemanticMemory:
                 - "attributes": Dict of concept_name -> attributes to update
             source: Source of the knowledge (e.g., "experience", "user", "inference")
             confidence: Confidence level of the new knowledge (0.0 to 1.0)
-            
+
         Returns:
             IntegrationResult with details of what was created/updated.
-            
+
         Validates: Requirements 4.2, 4.5
         """
         result = IntegrationResult(
@@ -343,30 +353,30 @@ class SemanticMemory:
             conflicts=[],
             resolution_actions=[],
         )
-        
+
         try:
             # Process concepts
             concepts = knowledge.get("concepts", [])
             for concept_def in concepts:
                 self._integrate_concept(concept_def, source, confidence, result)
-            
+
             # Process relationships
             relationships = knowledge.get("relationships", [])
             for rel_def in relationships:
                 self._integrate_relationship(rel_def, source, confidence, result)
-            
+
             # Process attribute updates
             attributes = knowledge.get("attributes", {})
             for concept_name, attrs in attributes.items():
                 self._integrate_attributes(concept_name, attrs, source, confidence, result)
-            
+
             self._total_integrations += 1
             self._total_conflicts += len(result.conflicts)
-            
+
         except Exception as e:
             result.success = False
             result.error_message = str(e)
-        
+
         return result
 
     def _integrate_concept(
@@ -378,7 +388,7 @@ class SemanticMemory:
     ) -> None:
         """
         Integrate a single concept definition.
-        
+
         Args:
             concept_def: Concept definition with name, type, properties.
             source: Source of the knowledge.
@@ -388,13 +398,13 @@ class SemanticMemory:
         name = concept_def.get("name", "")
         if not name:
             return
-        
+
         node_type = concept_def.get("type", "entity")
         properties = concept_def.get("properties", {})
-        
+
         # Check if concept already exists
         existing = self._knowledge_graph.get_node_by_name(name, record_access=False)
-        
+
         if existing is None:
             # Create new concept
             node = self._knowledge_graph.create_node(
@@ -408,7 +418,7 @@ class SemanticMemory:
         else:
             # Check for conflicts and update
             conflicts = self._detect_concept_conflicts(existing, concept_def, confidence)
-            
+
             # Track which properties had conflicts (to avoid double-updating)
             conflicted_properties = set()
             for conflict in conflicts:
@@ -416,18 +426,19 @@ class SemanticMemory:
                     conflicted_properties.add(conflict.property_key)
                 resolved = self._resolve_conflict(conflict, existing, concept_def, confidence)
                 result.conflicts.append(resolved)
-            
+
             # Update non-conflicting properties only
             if properties:
                 non_conflicting_props = {
-                    k: v for k, v in properties.items() 
+                    k: v
+                    for k, v in properties.items()
                     if k not in conflicted_properties and k not in existing.properties
                 }
                 if non_conflicting_props:
                     self._knowledge_graph.update_node(existing.node_id, non_conflicting_props)
                 existing.metadata["last_source"] = source
                 existing.metadata["last_confidence"] = confidence
-            
+
             result.updated_concepts.append(existing.node_id)
             result.resolution_actions.append(f"Updated existing concept: {name}")
 
@@ -439,45 +450,49 @@ class SemanticMemory:
     ) -> List[ConflictInfo]:
         """
         Detect conflicts between existing concept and new definition.
-        
+
         Args:
             existing: Existing concept node.
             new_def: New concept definition.
             new_confidence: Confidence of new information.
-            
+
         Returns:
             List of detected conflicts.
         """
         conflicts = []
-        
+
         # Check type conflict
         new_type = new_def.get("type")
         if new_type and new_type != existing.node_type:
-            conflicts.append(ConflictInfo(
-                conflict_id=str(uuid.uuid4()),
-                existing_node_id=existing.node_id,
-                existing_value=existing.node_type,
-                new_value=new_type,
-                conflict_type="type",
-                resolution="pending",
-            ))
-        
+            conflicts.append(
+                ConflictInfo(
+                    conflict_id=str(uuid.uuid4()),
+                    existing_node_id=existing.node_id,
+                    existing_value=existing.node_type,
+                    new_value=new_type,
+                    conflict_type="type",
+                    resolution="pending",
+                )
+            )
+
         # Check property conflicts
         new_props = new_def.get("properties", {})
         for key, new_value in new_props.items():
             if key in existing.properties:
                 existing_value = existing.properties[key]
                 if existing_value != new_value:
-                    conflicts.append(ConflictInfo(
-                        conflict_id=str(uuid.uuid4()),
-                        existing_node_id=existing.node_id,
-                        existing_value=existing_value,
-                        new_value=new_value,
-                        conflict_type="attribute",
-                        resolution="pending",
-                        property_key=key,
-                    ))
-        
+                    conflicts.append(
+                        ConflictInfo(
+                            conflict_id=str(uuid.uuid4()),
+                            existing_node_id=existing.node_id,
+                            existing_value=existing_value,
+                            new_value=new_value,
+                            conflict_type="attribute",
+                            resolution="pending",
+                            property_key=key,
+                        )
+                    )
+
         return conflicts
 
     def _resolve_conflict(
@@ -489,26 +504,26 @@ class SemanticMemory:
     ) -> ConflictInfo:
         """
         Resolve a knowledge conflict using the configured strategy.
-        
+
         Args:
             conflict: The conflict to resolve.
             existing: Existing concept node.
             new_def: New concept definition.
             new_confidence: Confidence of new information.
-            
+
         Returns:
             Updated ConflictInfo with resolution.
-            
+
         Validates: Requirements 4.5
         """
         strategy = ConflictResolutionStrategy(self._config.conflict_resolution_strategy)
         existing_confidence = existing.metadata.get("confidence", 0.5)
-        
+
         if strategy == ConflictResolutionStrategy.NEWEST_WINS:
             # New information always wins
             conflict.resolution = "new_wins"
             self._apply_new_value(existing, conflict)
-            
+
         elif strategy == ConflictResolutionStrategy.HIGHEST_CONFIDENCE:
             # Higher confidence wins
             if new_confidence > existing_confidence:
@@ -516,7 +531,7 @@ class SemanticMemory:
                 self._apply_new_value(existing, conflict)
             else:
                 conflict.resolution = "existing_wins_confidence"
-                
+
         elif strategy == ConflictResolutionStrategy.MERGE:
             # Attempt to merge values
             merged = self._merge_values(conflict.existing_value, conflict.new_value)
@@ -528,7 +543,7 @@ class SemanticMemory:
                 # Fall back to newest wins if merge fails
                 conflict.resolution = "new_wins_merge_failed"
                 self._apply_new_value(existing, conflict)
-        
+
         return conflict
 
     def _apply_new_value(self, existing: ConceptNode, conflict: ConflictInfo) -> None:
@@ -550,7 +565,7 @@ class SemanticMemory:
     def _merge_values(self, existing_value: Any, new_value: Any) -> Optional[Any]:
         """
         Attempt to merge two values.
-        
+
         Returns merged value or None if merge is not possible.
         """
         # Merge lists by combining unique elements
@@ -560,19 +575,19 @@ class SemanticMemory:
                 if item not in merged:
                     merged.append(item)
             return merged
-        
+
         # Merge dicts by combining keys
         if isinstance(existing_value, dict) and isinstance(new_value, dict):
             merged = dict(existing_value)
             merged.update(new_value)
             return merged
-        
+
         # Merge strings by concatenation if different
         if isinstance(existing_value, str) and isinstance(new_value, str):
             if existing_value != new_value:
                 return f"{existing_value}; {new_value}"
             return existing_value
-        
+
         # Cannot merge other types
         return None
 
@@ -585,7 +600,7 @@ class SemanticMemory:
     ) -> None:
         """
         Integrate a single relationship definition.
-        
+
         Args:
             rel_def: Relationship definition with source, target, type.
             source: Source of the knowledge.
@@ -596,10 +611,10 @@ class SemanticMemory:
         target_name = rel_def.get("target", "")
         rel_type = rel_def.get("type", "related_to")
         weight = rel_def.get("weight", 0.5)
-        
+
         if not source_name or not target_name:
             return
-        
+
         # Find or create source node
         source_node = self._knowledge_graph.get_node_by_name(source_name, record_access=False)
         if source_node is None:
@@ -609,7 +624,7 @@ class SemanticMemory:
                 metadata={"source": source, "confidence": confidence},
             )
             result.new_concepts.append(source_node.node_id)
-        
+
         # Find or create target node
         target_node = self._knowledge_graph.get_node_by_name(target_name, record_access=False)
         if target_node is None:
@@ -619,12 +634,12 @@ class SemanticMemory:
                 metadata={"source": source, "confidence": confidence},
             )
             result.new_concepts.append(target_node.node_id)
-        
+
         # Check if relationship already exists
         existing_rel = self._knowledge_graph.get_relationship_between(
             source_node.node_id, target_node.node_id, rel_type
         )
-        
+
         if existing_rel is None:
             # Create new relationship
             rel = self._knowledge_graph.create_relationship(
@@ -656,7 +671,7 @@ class SemanticMemory:
     ) -> None:
         """
         Integrate attribute updates for a concept.
-        
+
         Args:
             concept_name: Name of the concept to update.
             attributes: Attributes to add/update.
@@ -665,7 +680,7 @@ class SemanticMemory:
             result: IntegrationResult to update.
         """
         node = self._knowledge_graph.get_node_by_name(concept_name, record_access=False)
-        
+
         if node is None:
             # Create new concept with attributes
             node = self._knowledge_graph.create_node(
@@ -690,11 +705,13 @@ class SemanticMemory:
                             conflict_type="attribute",
                             resolution="pending",
                         )
-                        resolved = self._resolve_conflict(conflict, node, {"properties": {key: new_value}}, confidence)
+                        resolved = self._resolve_conflict(
+                            conflict, node, {"properties": {key: new_value}}, confidence
+                        )
                         result.conflicts.append(resolved)
                 else:
                     node.properties[key] = new_value
-            
+
             node.metadata["last_source"] = source
             node.metadata["last_confidence"] = confidence
             result.updated_concepts.append(node.node_id)
@@ -709,19 +726,19 @@ class SemanticMemory:
     ) -> List[ConceptNode]:
         """
         Query semantic memory for concepts matching the query text.
-        
+
         Args:
             query_text: Text to search for in concept names and properties.
             max_results: Maximum number of results to return.
-            
+
         Returns:
             List of matching ConceptNodes, sorted by relevance.
-            
+
         Validates: Requirements 4.3
         """
         if max_results is None:
             max_results = self._config.max_query_results
-        
+
         return self._knowledge_graph.find_nodes(query_text, max_results=max_results)
 
     def query_relationships(
@@ -732,15 +749,15 @@ class SemanticMemory:
     ) -> List[Relationship]:
         """
         Query relationships for a specific node.
-        
+
         Args:
             node_id: ID of the node to query relationships for.
             relationship_type: Optional filter by relationship type.
             direction: "outgoing", "incoming", or "both".
-            
+
         Returns:
             List of matching Relationships.
-            
+
         Validates: Requirements 4.3
         """
         return self._knowledge_graph.get_relationships(
@@ -755,22 +772,22 @@ class SemanticMemory:
     ) -> List[ConceptNode]:
         """
         Find concepts related to the given concept within max_depth hops.
-        
+
         Args:
             concept_name: Name of the starting concept.
             max_depth: Maximum traversal depth.
             relationship_types: Optional filter by relationship types.
-            
+
         Returns:
             List of related ConceptNodes.
-            
+
         Validates: Requirements 4.3
         """
         # Find the starting node
         start_node = self._knowledge_graph.get_node_by_name(concept_name)
         if start_node is None:
             return []
-        
+
         # Traverse the graph
         paths = self._knowledge_graph.traverse(
             start_id=start_node.node_id,
@@ -778,64 +795,68 @@ class SemanticMemory:
             max_depth=max_depth,
             direction="both",
         )
-        
+
         # Collect unique related nodes
         related_ids: Set[str] = set()
         for path in paths:
             for node_id in path:
                 if node_id != start_node.node_id:
                     related_ids.add(node_id)
-        
+
         # Get the actual nodes
         related_nodes = []
         for node_id in related_ids:
             node = self._knowledge_graph.get_node(node_id)
             if node is not None:
                 related_nodes.append(node)
-        
+
         return related_nodes
 
     def get_concept_definition(self, concept_name: str) -> Optional[Dict[str, Any]]:
         """
         Get the full definition of a concept including its relationships.
-        
+
         Args:
             concept_name: Name of the concept.
-            
+
         Returns:
             Dictionary with concept details or None if not found.
-            
+
         Validates: Requirements 4.3
         """
         node = self._knowledge_graph.get_node_by_name(concept_name)
         if node is None:
             return None
-        
+
         # Get relationships
         relationships = self._knowledge_graph.get_relationships(node.node_id)
-        
+
         # Build relationship summaries
         rel_summaries = []
         for rel in relationships:
             if rel.source_id == node.node_id:
                 target = self._knowledge_graph.get_node(rel.target_id, record_access=False)
                 target_name = target.name if target else rel.target_id
-                rel_summaries.append({
-                    "type": rel.relationship_type,
-                    "direction": "outgoing",
-                    "target": target_name,
-                    "weight": rel.weight,
-                })
+                rel_summaries.append(
+                    {
+                        "type": rel.relationship_type,
+                        "direction": "outgoing",
+                        "target": target_name,
+                        "weight": rel.weight,
+                    }
+                )
             else:
                 source = self._knowledge_graph.get_node(rel.source_id, record_access=False)
                 source_name = source.name if source else rel.source_id
-                rel_summaries.append({
-                    "type": rel.relationship_type,
-                    "direction": "incoming",
-                    "source": source_name,
-                    "weight": rel.weight,
-                })
-        
+                rel_summaries.append(
+                    {
+                        "type": rel.relationship_type,
+                        "direction": "incoming",
+                        "source": source_name,
+                        "weight": rel.weight,
+                    }
+                )
+
         return {
             "node_id": node.node_id,
             "name": node.name,
@@ -853,17 +874,17 @@ class SemanticMemory:
     def extract_from_episodes(self, episodes: List[Episode]) -> ExtractionResult:
         """
         Extract generalizable patterns from episodes and integrate into semantic memory.
-        
+
         This method analyzes episodes to extract:
         - Concepts from context keys and values
         - Relationships from event sequences and context associations
-        
+
         Args:
             episodes: List of episodes to extract patterns from.
-            
+
         Returns:
             ExtractionResult with extracted concepts and relationships.
-            
+
         Validates: Requirements 4.4
         """
         result = ExtractionResult(
@@ -871,43 +892,37 @@ class SemanticMemory:
             extracted_relationships=[],
             episodes_processed=len(episodes),
         )
-        
+
         if not episodes:
             return result
-        
+
         # Extract concepts from contexts
         concept_counts: Dict[str, int] = {}
         concept_types: Dict[str, str] = {}
-        
+
         for episode in episodes:
-            self._extract_concepts_from_context(
-                episode.context, concept_counts, concept_types
-            )
-        
+            self._extract_concepts_from_context(episode.context, concept_counts, concept_types)
+
         # Filter by frequency threshold
         min_count = max(1, int(len(episodes) * self._config.extraction_min_frequency))
         for concept_name, count in concept_counts.items():
             if count >= min_count:
                 result.extracted_concepts.append(concept_name)
-        
+
         # Extract relationships from event sequences
         relationship_counts: Dict[Tuple[str, str, str], int] = {}
-        
+
         for episode in episodes:
-            self._extract_relationships_from_events(
-                episode.events, relationship_counts
-            )
-            self._extract_relationships_from_context(
-                episode.context, relationship_counts
-            )
-        
+            self._extract_relationships_from_events(episode.events, relationship_counts)
+            self._extract_relationships_from_context(episode.context, relationship_counts)
+
         # Filter relationships by frequency
         for (source, rel_type, target), count in relationship_counts.items():
             if count >= min_count:
                 result.extracted_relationships.append((source, rel_type, target))
-        
+
         result.patterns_found = len(result.extracted_concepts) + len(result.extracted_relationships)
-        
+
         # Integrate extracted knowledge
         if result.extracted_concepts or result.extracted_relationships:
             knowledge = self._build_knowledge_from_extraction(
@@ -918,7 +933,7 @@ class SemanticMemory:
             result.integration_result = self.integrate_knowledge(
                 knowledge, source="episodic_extraction"
             )
-        
+
         self._total_extractions += 1
         return result
 
@@ -934,16 +949,16 @@ class SemanticMemory:
             if isinstance(key, str) and len(key) > 1:
                 concept_counts[key] = concept_counts.get(key, 0) + 1
                 concept_types[key] = "attribute"
-            
+
             # String values often represent entities
             if isinstance(value, str) and len(value) > 1 and not value.isdigit():
                 concept_counts[value] = concept_counts.get(value, 0) + 1
                 concept_types[value] = "entity"
-            
+
             # Recurse into nested dicts
             elif isinstance(value, dict):
                 self._extract_concepts_from_context(value, concept_counts, concept_types)
-            
+
             # Extract from lists
             elif isinstance(value, list):
                 for item in value:
@@ -963,28 +978,28 @@ class SemanticMemory:
         for i in range(len(events) - 1):
             event1 = events[i]
             event2 = events[i + 1]
-            
+
             type1 = event1.get("type", event1.get("name", "unknown"))
             type2 = event2.get("type", event2.get("name", "unknown"))
-            
+
             if isinstance(type1, str) and isinstance(type2, str):
                 key = (type1, "followed_by", type2)
                 relationship_counts[key] = relationship_counts.get(key, 0) + 1
-        
+
         # Extract relationships within events
         for event in events:
             event_type = event.get("type", event.get("name"))
             if not isinstance(event_type, str):
                 continue
-            
+
             # Look for subject-action-object patterns
             subject = event.get("subject", event.get("actor"))
             obj = event.get("object", event.get("target"))
-            
+
             if isinstance(subject, str) and isinstance(event_type, str):
                 key = (subject, "performs", event_type)
                 relationship_counts[key] = relationship_counts.get(key, 0) + 1
-            
+
             if isinstance(event_type, str) and isinstance(obj, str):
                 key = (event_type, "affects", obj)
                 relationship_counts[key] = relationship_counts.get(key, 0) + 1
@@ -999,12 +1014,12 @@ class SemanticMemory:
         for key, value in context.items():
             if not isinstance(key, str):
                 continue
-            
+
             # String values suggest "has_attribute" relationships
             if isinstance(value, str) and len(value) > 1:
                 rel_key = (key, "has_value", value)
                 relationship_counts[rel_key] = relationship_counts.get(rel_key, 0) + 1
-            
+
             # List values suggest "contains" relationships
             elif isinstance(value, list):
                 for item in value:
@@ -1023,24 +1038,28 @@ class SemanticMemory:
             "concepts": [],
             "relationships": [],
         }
-        
+
         # Add concepts
         for concept_name in concepts:
-            knowledge["concepts"].append({
-                "name": concept_name,
-                "type": concept_types.get(concept_name, "entity"),
-                "properties": {"extracted": True},
-            })
-        
+            knowledge["concepts"].append(
+                {
+                    "name": concept_name,
+                    "type": concept_types.get(concept_name, "entity"),
+                    "properties": {"extracted": True},
+                }
+            )
+
         # Add relationships
         for source, rel_type, target in relationships:
-            knowledge["relationships"].append({
-                "source": source,
-                "type": rel_type,
-                "target": target,
-                "weight": 0.5,
-            })
-        
+            knowledge["relationships"].append(
+                {
+                    "source": source,
+                    "type": rel_type,
+                    "target": target,
+                    "weight": 0.5,
+                }
+            )
+
         return knowledge
 
     # ==================== Consolidation ====================
@@ -1048,15 +1067,15 @@ class SemanticMemory:
     def consolidate(self) -> ConsolidationResult:
         """
         Consolidate semantic memory by merging, strengthening, and pruning.
-        
+
         This method performs:
         - Merging similar concepts (based on name similarity)
         - Strengthening frequently accessed relationships
         - Pruning weak/unused knowledge
-        
+
         Returns:
             ConsolidationResult with details of operations performed.
-            
+
         Validates: Requirements 4.4
         """
         result = ConsolidationResult(
@@ -1065,16 +1084,16 @@ class SemanticMemory:
             pruned_concepts=[],
             pruned_relationships=[],
         )
-        
+
         # Step 1: Merge similar concepts
         self._merge_similar_concepts(result)
-        
+
         # Step 2: Strengthen frequently accessed relationships
         self._strengthen_relationships(result)
-        
+
         # Step 3: Prune weak/unused knowledge
         self._prune_weak_knowledge(result)
-        
+
         # Update statistics
         result.statistics = {
             "total_concepts": self._knowledge_graph.get_node_count(),
@@ -1084,7 +1103,7 @@ class SemanticMemory:
             "pruned_concepts_count": len(result.pruned_concepts),
             "pruned_relationships_count": len(result.pruned_relationships),
         }
-        
+
         self._total_consolidations += 1
         return result
 
@@ -1092,37 +1111,37 @@ class SemanticMemory:
         """Merge concepts with very similar names."""
         nodes = self._knowledge_graph.get_all_nodes()
         merged_ids: Set[str] = set()
-        
+
         for i, node1 in enumerate(nodes):
             if node1.node_id in merged_ids:
                 continue
-            
-            for node2 in nodes[i + 1:]:
+
+            for node2 in nodes[i + 1 :]:
                 if node2.node_id in merged_ids:
                     continue
-                
+
                 # Check name similarity
                 similarity = self._calculate_name_similarity(node1.name, node2.name)
-                
+
                 if similarity >= self._config.consolidation_merge_threshold:
                     # Merge node2 into node1 (keep the one with more accesses)
                     if node1.access_count >= node2.access_count:
                         kept, removed = node1, node2
                     else:
                         kept, removed = node2, node1
-                    
+
                     # Transfer relationships from removed to kept
                     self._transfer_relationships(removed.node_id, kept.node_id)
-                    
+
                     # Merge properties
                     for key, value in removed.properties.items():
                         if key not in kept.properties:
                             kept.properties[key] = value
-                    
+
                     # Remove the merged node
                     self._knowledge_graph.remove_node(removed.node_id)
                     merged_ids.add(removed.node_id)
-                    
+
                     result.merged_concepts.append((kept.node_id, removed.node_id))
 
     def _calculate_name_similarity(self, name1: str, name2: str) -> float:
@@ -1130,29 +1149,29 @@ class SemanticMemory:
         # Normalize names
         n1 = name1.lower().strip()
         n2 = name2.lower().strip()
-        
+
         # Exact match
         if n1 == n2:
             return 1.0
-        
+
         # One contains the other
         if n1 in n2 or n2 in n1:
             shorter = min(len(n1), len(n2))
             longer = max(len(n1), len(n2))
             return shorter / longer if longer > 0 else 0.0
-        
+
         # Character-level Jaccard similarity
         set1 = set(n1)
         set2 = set(n2)
         intersection = len(set1 & set2)
         union = len(set1 | set2)
-        
+
         return intersection / union if union > 0 else 0.0
 
     def _transfer_relationships(self, from_id: str, to_id: str) -> None:
         """Transfer relationships from one node to another."""
         relationships = self._knowledge_graph.get_relationships(from_id)
-        
+
         for rel in relationships:
             # Determine new source and target
             if rel.source_id == from_id:
@@ -1161,16 +1180,16 @@ class SemanticMemory:
             else:
                 new_source = rel.source_id
                 new_target = to_id
-            
+
             # Skip self-loops
             if new_source == new_target:
                 continue
-            
+
             # Check if relationship already exists
             existing = self._knowledge_graph.get_relationship_between(
                 new_source, new_target, rel.relationship_type
             )
-            
+
             if existing is None:
                 # Create new relationship
                 try:
@@ -1192,20 +1211,20 @@ class SemanticMemory:
     def _strengthen_relationships(self, result: ConsolidationResult) -> None:
         """Strengthen relationships based on node access patterns."""
         relationships = self._knowledge_graph.get_all_relationships()
-        
+
         for rel in relationships:
             source = self._knowledge_graph.get_node(rel.source_id, record_access=False)
             target = self._knowledge_graph.get_node(rel.target_id, record_access=False)
-            
+
             if source is None or target is None:
                 continue
-            
+
             # Calculate access-based strength boost
             total_accesses = source.access_count + target.access_count
             if total_accesses > 5:  # Threshold for "frequently accessed"
                 boost = min(0.1, total_accesses * 0.01)
                 new_weight = min(1.0, rel.weight + boost)
-                
+
                 if new_weight > rel.weight:
                     rel.weight = new_weight
                     result.strengthened_relationships.append(rel.relationship_id)
@@ -1218,7 +1237,7 @@ class SemanticMemory:
             if rel.weight < self._config.prune_strength_threshold:
                 self._knowledge_graph.remove_relationship(rel.relationship_id)
                 result.pruned_relationships.append(rel.relationship_id)
-        
+
         # Prune unused concepts (no relationships and low access)
         nodes = self._knowledge_graph.get_all_nodes()
         for node in nodes:
@@ -1234,7 +1253,7 @@ class SemanticMemory:
     def get_statistics(self) -> Dict[str, Any]:
         """Get detailed statistics about the semantic memory."""
         graph_stats = self._knowledge_graph.get_statistics()
-        
+
         return {
             "knowledge_graph": graph_stats,
             "total_integrations": self._total_integrations,
@@ -1262,10 +1281,10 @@ class SemanticMemory:
     def to_dict(self) -> Dict[str, Any]:
         """
         Serialize the semantic memory to a dictionary.
-        
+
         Returns:
             Dictionary representation of the semantic memory.
-            
+
         Validates: Requirements 4.6
         """
         return {
@@ -1282,30 +1301,30 @@ class SemanticMemory:
     def from_dict(cls, data: Dict[str, Any]) -> "SemanticMemory":
         """
         Create a semantic memory from a dictionary.
-        
+
         Args:
             data: Dictionary representation of the semantic memory.
-            
+
         Returns:
             A new SemanticMemory instance.
-            
+
         Validates: Requirements 4.6
         """
         config = data.get("config", {})
         memory = cls(config=config)
-        
+
         # Restore knowledge graph
         kg_data = data.get("knowledge_graph", {})
         if kg_data:
             memory._knowledge_graph = KnowledgeGraph.from_dict(kg_data)
-        
+
         # Restore statistics
         memory._total_integrations = data.get("total_integrations", 0)
         memory._total_conflicts = data.get("total_conflicts", 0)
         memory._total_extractions = data.get("total_extractions", 0)
         memory._total_consolidations = data.get("total_consolidations", 0)
         memory._initialized_at = data.get("initialized_at", time.time())
-        
+
         return memory
 
     def clear(self) -> None:
@@ -1323,16 +1342,17 @@ class SemanticMemory:
 
 # ==================== Factory Functions ====================
 
+
 def create_semantic_memory(config: Optional[Dict[str, Any]] = None) -> SemanticMemory:
     """
     Factory function to create a SemanticMemory instance.
-    
+
     Args:
         config: Optional configuration dictionary.
-        
+
     Returns:
         A new SemanticMemory instance.
-        
+
     Validates: Requirements 4.2
     """
     return SemanticMemory(config=config)

@@ -72,6 +72,7 @@ class OrchestrationError(MuAIError):
 
 # Real Model Integration Exceptions (Phase 1)
 
+
 class ModelLoadError(ResourceError):
     """模型加载错误：HuggingFace模型加载失败、权重下载失败、设备分配失败"""
 
@@ -79,7 +80,7 @@ class ModelLoadError(ResourceError):
         self,
         message: str,
         model_name: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(message, context)
         self.model_name = model_name
@@ -95,7 +96,7 @@ class InferenceError(ModelError):
         message: str,
         model_name: Optional[str] = None,
         input_length: Optional[int] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(message, context)
         self.model_name = model_name
@@ -115,7 +116,7 @@ class OutOfMemoryError(ResourceError):
         device: Optional[str] = None,
         required_memory: Optional[int] = None,
         available_memory: Optional[int] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(message, context)
         self.device = device
@@ -137,7 +138,7 @@ class QuantizationError(ModelError):
         message: str,
         quantization_type: Optional[str] = None,
         model_name: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(message, context)
         self.quantization_type = quantization_type

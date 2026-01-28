@@ -12,7 +12,7 @@ from mm_orch.benchmark.reporter import BenchmarkReporter, BenchmarkReport
 __all__ = [
     "LatencyBenchmark",
     "LatencyResult",
-    "MemoryBenchmark", 
+    "MemoryBenchmark",
     "MemoryResult",
     "ThroughputBenchmark",
     "ThroughputResult",

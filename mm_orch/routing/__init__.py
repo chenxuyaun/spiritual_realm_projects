@@ -11,4 +11,4 @@ from mm_orch.routing.router_v1 import RouterV1, RoutingRule
 from mm_orch.routing.router_v2 import RouterV2
 from mm_orch.routing.router_v3 import RouterV3
 
-__all__ = ['RouterV1', 'RouterV2', 'RouterV3', 'RoutingRule']
+__all__ = ["RouterV1", "RouterV2", "RouterV3", "RoutingRule"]

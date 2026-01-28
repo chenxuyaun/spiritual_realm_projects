@@ -22,6 +22,7 @@ from mm_orch.logger import get_logger, configure_logger
 # Phase B integration with fallback
 try:
     from mm_orch.orchestration.phase_b_orchestrator import get_phase_b_orchestrator
+
     PHASE_B_AVAILABLE = True
 except ImportError:
     PHASE_B_AVAILABLE = False
@@ -48,7 +49,7 @@ class CLI:
         verbose: bool = False,
         model: Optional[str] = None,
         use_real_models: bool = False,
-        use_phase_b: bool = False
+        use_phase_b: bool = False,
     ):
         """
         初始化CLI
@@ -70,7 +71,7 @@ class CLI:
                 logger.warning("Phase B requested but not available, using Phase A")
             self.orchestrator = orchestrator or get_orchestrator()
             self.using_phase_b = False
-        
+
         self.verbose = verbose
         self.model = model
         self.use_real_models = use_real_models
@@ -273,7 +274,7 @@ class CLI:
             # 处理结构化教学包结果
             if "lesson_explain_structured" in result:
                 return self._format_structured_lesson(result["lesson_explain_structured"])
-            
+
             # 处理传统教学包结果
             if "plan" in result and "explanation" in result:
                 parts = []
@@ -309,79 +310,79 @@ class CLI:
     def _format_structured_lesson(self, lesson_data: Dict[str, Any]) -> str:
         """
         Format structured lesson for CLI display.
-        
+
         Args:
             lesson_data: StructuredLesson JSON dictionary
-        
+
         Returns:
             Formatted string with clear sections, numbered examples, and bullet points
-        
+
         Requirements:
             - 20.3: List examples with numbering
             - 20.4: Display key points as bullet points
         """
         from mm_orch.workflows.lesson_structure import StructuredLesson
-        
+
         try:
             lesson = StructuredLesson.from_json(lesson_data)
-            
+
             parts = []
-            
+
             # Display topic and grade prominently
             parts.append("=" * 60)
             parts.append(f"主题: {lesson.topic}")
             parts.append(f"年级/难度: {lesson.grade}")
             parts.append("=" * 60)
             parts.append("")
-            
+
             # Display each section with clear headers
             for i, section in enumerate(lesson.sections, 1):
                 parts.append(f"【第{i}部分：{section.name}】")
                 parts.append("-" * 60)
                 parts.append("")
-                
+
                 # Teacher content
                 parts.append("教师讲解:")
                 parts.append(section.teacher_say)
                 parts.append("")
-                
+
                 # Student responses (if present)
                 if section.student_may_say:
                     parts.append("学生可能的回答:")
                     parts.append(section.student_may_say)
                     parts.append("")
-                
+
                 # Examples with numbering
                 if section.examples:
                     parts.append("示例:")
                     for j, example in enumerate(section.examples, 1):
                         parts.append(f"  {j}. {example}")
                     parts.append("")
-                
+
                 # Questions with numbering
                 if section.questions:
                     parts.append("问题:")
                     for j, question in enumerate(section.questions, 1):
                         parts.append(f"  {j}. {question}")
                     parts.append("")
-                
+
                 # Key points as bullet points
                 if section.key_points:
                     parts.append("要点:")
                     for point in section.key_points:
                         parts.append(f"  • {point}")
                     parts.append("")
-                
+
                 # Teaching tips (if present)
                 if section.tips:
                     parts.append("教学提示:")
                     parts.append(f"  💡 {section.tips}")
                     parts.append("")
-            
+
             parts.append("=" * 60)
-            
+
             return "\n".join(parts)
-        
+
         except Exception as e:
             logger.error(f"Failed to format structured lesson: {e}")
             # Fallback to simple dict display
@@ -488,9 +489,7 @@ class CLI:
 
 
 def run_benchmark(
-    model_name: str = "gpt2",
-    output_dir: str = "data/benchmarks",
-    output_format: str = "json"
+    model_name: str = "gpt2", output_dir: str = "data/benchmarks", output_format: str = "json"
 ) -> int:
     """
     运行基准测试
@@ -525,7 +524,7 @@ def run_benchmark(
             latency_result = latency_bench.run_benchmark(
                 model_name=model_name,
                 test_prompts=["Hello, how are you?", "What is Python?"],
-                num_runs=3
+                num_runs=3,
             )
             results.append(latency_result)
             print(f"  TTFT: {latency_result.metrics.get('avg_ttft', 0):.3f}s")
@@ -547,12 +546,12 @@ def run_benchmark(
         print("\n运行吞吐量测试...")
         try:
             throughput_result = throughput_bench.run_benchmark(
-                model_name=model_name,
-                num_requests=5,
-                concurrent_levels=[1, 2]
+                model_name=model_name, num_requests=5, concurrent_levels=[1, 2]
             )
             results.append(throughput_result)
-            print(f"  单请求吞吐: {throughput_result.metrics.get('single_throughput', 0):.1f} tokens/s")
+            print(
+                f"  单请求吞吐: {throughput_result.metrics.get('single_throughput', 0):.1f} tokens/s"
+            )
         except Exception as e:
             print(f"  吞吐量测试失败: {e}")
 
@@ -795,7 +794,7 @@ def main(args=None) -> int:
             return run_benchmark(
                 model_name=model_name,
                 output_dir=parsed_args.benchmark_output,
-                output_format=parsed_args.benchmark_format
+                output_format=parsed_args.benchmark_format,
             )
 
         # 创建CLI实例
@@ -803,7 +802,7 @@ def main(args=None) -> int:
             verbose=parsed_args.verbose,
             model=parsed_args.model,
             use_real_models=parsed_args.real_models,
-            use_phase_b=parsed_args.phase_b
+            use_phase_b=parsed_args.phase_b,
         )
 
         # 确定运行模式
