@@ -274,8 +274,6 @@ class ModelManager:
 
                 # 应用量化 - Requirement 6.3
                 if self.enable_quantization and config.quantization:
-                    quantization_applied = False
-                    
                     try:
                         # 尝试导入bitsandbytes
                         import bitsandbytes as bnb
@@ -288,7 +286,6 @@ class ModelManager:
                                 llm_int8_threshold=6.0,
                             )
                             load_kwargs["quantization_config"] = quantization_config
-                            quantization_applied = True
                             self._logger.info(
                                 f"Applying 8-bit quantization for {config.name}",
                                 context={"device": device}
@@ -303,7 +300,6 @@ class ModelManager:
                                 bnb_4bit_quant_type="nf4",
                             )
                             load_kwargs["quantization_config"] = quantization_config
-                            quantization_applied = True
                             self._logger.info(
                                 f"Applying 4-bit quantization for {config.name}",
                                 context={"device": device}
@@ -315,7 +311,6 @@ class ModelManager:
                             f"bitsandbytes not available, loading {config.name} without quantization",
                             context={"requested_quantization": config.quantization}
                         )
-                        quantization_applied = False
                     
                     except Exception as e:
                         # Fallback: quantization configuration failed
@@ -323,7 +318,6 @@ class ModelManager:
                             f"Failed to configure quantization for {config.name}: {e}, falling back to standard loading",
                             context={"requested_quantization": config.quantization}
                         )
-                        quantization_applied = False
             else:
                 load_kwargs["device_map"] = "cpu"
 

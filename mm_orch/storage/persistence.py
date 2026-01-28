@@ -445,13 +445,6 @@ class DataExporter:
 
         try:
             with zipfile.ZipFile(import_path, "r") as zf:
-                # Read manifest
-                try:
-                    manifest_data = zf.read("manifest.json")
-                    manifest = json.loads(manifest_data)
-                except Exception:
-                    manifest = {"components": []}
-
                 # Import consciousness state
                 if "consciousness/state.json" in zf.namelist():
                     try:

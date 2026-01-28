@@ -202,7 +202,6 @@ class PerformanceMonitor:
             
             # Sort for percentile calculation
             sorted_latencies = sorted(latencies)
-            n = len(sorted_latencies)
             
             return {
                 "p50": self._percentile(sorted_latencies, 50),

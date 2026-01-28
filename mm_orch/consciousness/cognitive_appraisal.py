@@ -425,7 +425,6 @@ class CognitiveAppraisalSystem:
         Requirements: 7.1
         """
         context = context or {}
-        event_type = event.get("type", "unknown")
         
         # Base coping potential
         base_coping = 0.5

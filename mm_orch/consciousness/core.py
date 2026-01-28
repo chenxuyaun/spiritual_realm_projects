@@ -498,7 +498,6 @@ class ConsciousnessCore:
             feedback = "Task completed with issues"
 
         # Calculate emotion impact
-        emotion_state = self.emotion.get_state()
         emotion_impact = {
             "valence_delta": 0.1 if success else -0.1,
             "arousal_delta": -0.05,  # Completion reduces arousal

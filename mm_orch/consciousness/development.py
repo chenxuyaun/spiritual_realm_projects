@@ -185,8 +185,8 @@ class DevelopmentSystem:
         Returns:
             The StageConfig for the stage.
         """
-        stage = stage or self._current_stage
-        return self.STAGE_CONFIGS[stage]
+        stage_to_use = stage or self._current_stage
+        return self.STAGE_CONFIGS[stage_to_use]
 
     def is_feature_enabled(self, feature: str) -> bool:
         """
@@ -230,7 +230,6 @@ class DevelopmentSystem:
             Dictionary with access status and details.
         """
         enabled = self.is_feature_enabled(feature)
-        config = self.STAGE_CONFIGS[self._current_stage]
 
         result = {
             "feature": feature,

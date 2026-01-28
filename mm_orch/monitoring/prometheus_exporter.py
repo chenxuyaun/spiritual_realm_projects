@@ -50,13 +50,13 @@ class PrometheusExporter:
             # Legacy: port number
             self.port = config_or_port
             self.enabled = enabled
-            start_server = True
+            self.start_server = True
         else:
             # New: PrometheusConfig object
             config = config_or_port
             self.port = config.port
             self.enabled = config.enabled
-            start_server = config.start_server
+            self.start_server = config.start_server
         
         self._server_started = False
         self._lock = threading.Lock()

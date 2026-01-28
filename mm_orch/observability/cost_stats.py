@@ -2,8 +2,11 @@
 
 import json
 from dataclasses import dataclass, asdict
-from typing import Dict, Any
+from typing import Dict, Any, TYPE_CHECKING
 from pathlib import Path
+
+if TYPE_CHECKING:
+    from mm_orch.observability.tracer import WorkflowTrace
 
 
 @dataclass

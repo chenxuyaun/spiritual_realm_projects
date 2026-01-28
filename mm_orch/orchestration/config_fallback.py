@@ -342,7 +342,7 @@ class ConfigurationManager:
     def _validate_tracer_config(self, config: Dict[str, Any]) -> bool:
         """Validate tracer configuration structure."""
         required_fields = ["output_path", "enabled"]
-        return all(field in config for field in required_fields)
+        return all(req_field in config for req_field in required_fields)
     
     def _validate_model_registry_config(self, config: Dict[str, Any]) -> bool:
         """Validate model registry configuration structure."""
@@ -358,7 +358,7 @@ class ConfigurationManager:
             if not isinstance(model, dict):
                 return False
             required_fields = ["name", "capabilities", "expected_vram_mb"]
-            if not all(field in model for field in required_fields):
+            if not all(req_field in model for req_field in required_fields):
                 return False
         
         return True

@@ -143,7 +143,6 @@ class GPUManager:
         
         # Get memory info
         torch.cuda.set_device(device_id)
-        memory_allocated = torch.cuda.memory_allocated(device_id) / (1024 ** 2)
         memory_reserved = torch.cuda.memory_reserved(device_id) / (1024 ** 2)
         available_memory_mb = total_memory_mb - memory_reserved
         

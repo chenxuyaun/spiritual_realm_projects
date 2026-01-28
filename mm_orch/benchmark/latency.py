@@ -338,10 +338,12 @@ class LatencyBenchmark:
                 def gen_fn(p):
                     return generate_fn(p, output_len)
                 
-                stream_fn_wrapped = None
+                # 创建带输出长度的流式生成函数
                 if stream_fn:
-                    def stream_fn_wrapped(p):
+                    def stream_fn_with_length(p):
                         return stream_fn(p, output_len)
+                else:
+                    stream_fn_with_length = None
                 
                 test_name = f"latency_in{input_len}_out{output_len}"
                 
@@ -350,7 +352,7 @@ class LatencyBenchmark:
                     prompt=prompt,
                     model_name=model_name,
                     get_output_tokens=get_output_tokens,
-                    stream_fn=stream_fn_wrapped,
+                    stream_fn=stream_fn_with_length,
                     test_name=test_name
                 )
                 result.input_length = input_len

@@ -172,7 +172,7 @@ class MemoryBenchmark:
         
         # 加载模型
         start_time = time.perf_counter()
-        model = load_fn()
+        _ = load_fn()  # Model loaded but not used in this function
         load_time = time.perf_counter() - start_time
         
         # 同步GPU

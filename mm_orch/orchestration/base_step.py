@@ -122,7 +122,7 @@ class BaseStep(ABC):
             # Merge updates into state
             return self.update_state(state, updates)
         
-        except Exception as e:
+        except Exception:
             # End cost tracking on error
             if self._cost_tracker and self._current_cost_id:
                 model_loads = 0

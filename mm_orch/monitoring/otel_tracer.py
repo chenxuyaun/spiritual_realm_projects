@@ -3,9 +3,12 @@
 import logging
 import threading
 from contextlib import contextmanager
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 from datetime import datetime
 import traceback
+
+if TYPE_CHECKING:
+    from mm_orch.monitoring.config import TracingConfig
 
 try:
     from opentelemetry import trace
