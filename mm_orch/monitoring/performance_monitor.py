@@ -5,7 +5,6 @@ This module provides detailed performance statistics collection and analysis,
 including latency tracking, throughput calculation, and resource utilization monitoring.
 """
 
-import time
 import psutil
 from collections import defaultdict, deque
 from dataclasses import dataclass, field

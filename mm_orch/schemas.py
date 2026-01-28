@@ -7,7 +7,7 @@ consciousness state.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 from enum import Enum
 import time
 import uuid

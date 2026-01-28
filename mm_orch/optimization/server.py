@@ -6,7 +6,6 @@ request queuing, model pre-loading, and graceful shutdown for production
 deployments.
 """
 
-import asyncio
 import signal
 import threading
 import time
@@ -17,7 +16,7 @@ from queue import Queue, Full, Empty
 from typing import Any, Dict, List, Optional
 
 from mm_orch.logger import get_logger
-from mm_orch.optimization.config import OptimizationConfig, ServerConfig
+from mm_orch.optimization.config import OptimizationConfig
 from mm_orch.optimization.manager import OptimizationManager, InferenceResult
 
 logger = get_logger(__name__)

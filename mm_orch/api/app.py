@@ -27,7 +27,7 @@ from mm_orch.exceptions import (
     NetworkError,
     WorkflowError,
 )
-from mm_orch.api.auth import APIKeyAuth, get_auth_manager, set_auth_manager
+from mm_orch.api.auth import APIKeyAuth, set_auth_manager
 
 
 logger = get_logger(__name__)

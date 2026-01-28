@@ -20,7 +20,7 @@ import re
 
 from mm_orch.workflows.base import BaseWorkflow
 from mm_orch.schemas import WorkflowResult, WorkflowType, LessonPack
-from mm_orch.exceptions import ValidationError, WorkflowError
+from mm_orch.exceptions import ValidationError
 from mm_orch.logger import get_logger
 
 if TYPE_CHECKING:

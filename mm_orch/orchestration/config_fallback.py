@@ -13,12 +13,11 @@ The fallback strategy ensures:
 Requirement 22.4: Configuration fallback logic
 """
 
-import os
 import json
 import yaml
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional
 from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from mm_orch.logger import get_logger
 
 

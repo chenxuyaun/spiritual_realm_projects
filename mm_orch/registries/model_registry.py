@@ -8,7 +8,7 @@ intelligent loading and scheduling decisions.
 """
 
 from typing import Any, Dict, List, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from mm_orch.logger import get_logger
 

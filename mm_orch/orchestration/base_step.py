@@ -8,8 +8,7 @@ helper methods, and support for both function-based and class-based steps.
 from abc import ABC, abstractmethod
 from typing import List, Any, Dict, Optional
 from mm_orch.orchestration.state import State
-from mm_orch.orchestration.step import Step
-from mm_orch.orchestration.cost_tracker import CostTracker, StepCost
+from mm_orch.orchestration.cost_tracker import CostTracker
 
 
 class BaseStep(ABC):
@@ -179,7 +178,6 @@ class BaseStep(ABC):
                 result = self.process(question)
                 return {"result": result}
         """
-        pass
 
     def update_state(self, state: State, updates: Dict[str, Any]) -> State:
         """

@@ -20,7 +20,7 @@ import numpy as np
 from mm_orch.workflows.base import BaseWorkflow
 from mm_orch.schemas import WorkflowResult, WorkflowType, Document
 from mm_orch.runtime.vector_db import VectorDBManager, get_vector_db
-from mm_orch.exceptions import ValidationError, WorkflowError, ResourceError
+from mm_orch.exceptions import ValidationError, ResourceError
 from mm_orch.logger import get_logger
 
 # Optional monitoring support

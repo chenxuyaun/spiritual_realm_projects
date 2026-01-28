@@ -6,10 +6,9 @@
 """
 
 import json
-import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 import numpy as np
 
@@ -108,7 +107,7 @@ class VectorDBManager:
     def _check_faiss_available(self) -> bool:
         """检查FAISS是否可用"""
         try:
-            import faiss
+            pass
 
             return True
         except ImportError:

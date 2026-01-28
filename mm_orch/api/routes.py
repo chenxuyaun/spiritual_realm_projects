@@ -17,16 +17,16 @@ API路由定义
 
 import time
 import uuid
-from typing import Optional, Dict, Any, List
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
 from mm_orch import __version__
 from mm_orch.schemas import UserRequest, WorkflowType, Document
-from mm_orch.orchestrator import get_orchestrator, WorkflowOrchestrator
+from mm_orch.orchestrator import get_orchestrator
 from mm_orch.consciousness import get_consciousness
-from mm_orch.runtime.vector_db import get_vector_db, VectorDBManager
+from mm_orch.runtime.vector_db import get_vector_db
 from mm_orch.logger import get_logger
 from mm_orch.api.schemas import (
     QueryRequest,
@@ -43,7 +43,7 @@ from mm_orch.api.schemas import (
     HealthResponse,
     ErrorResponse,
 )
-from mm_orch.api.auth import verify_api_key, optional_api_key
+from mm_orch.api.auth import verify_api_key
 from mm_orch.api.app import get_uptime
 
 
@@ -727,7 +727,7 @@ async def list_models(request: Request, api_key: str = Depends(verify_api_key)):
         # 尝试获取已加载模型
         loaded_models = []
         try:
-            from mm_orch.runtime.real_model_manager import RealModelManager
+            pass
 
             # 这里可以添加获取已加载模型的逻辑
         except ImportError:

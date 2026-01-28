@@ -6,18 +6,14 @@
 
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import Any, Dict, Iterator, List, Optional, Union
+from dataclasses import dataclass
+from typing import Any, Dict, Iterator, List, Optional
 
 import torch
 
 try:
     from transformers import (
-        PreTrainedModel,
-        PreTrainedTokenizer,
         TextIteratorStreamer,
-        StoppingCriteria,
-        StoppingCriteriaList,
     )
 
     HAS_TRANSFORMERS = True

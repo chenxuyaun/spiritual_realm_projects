@@ -6,12 +6,12 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 import torch
 
 try:
-    from transformers import BitsAndBytesConfig, AutoModelForCausalLM
+    from transformers import BitsAndBytesConfig
 
     HAS_TRANSFORMERS = True
 except ImportError:
@@ -81,7 +81,7 @@ class QuantizationManager:
         """
         if quant_type in ["8bit", "4bit"]:
             try:
-                import bitsandbytes
+                pass
 
                 return True
             except ImportError:

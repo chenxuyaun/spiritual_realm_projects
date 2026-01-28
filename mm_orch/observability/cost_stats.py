@@ -28,7 +28,6 @@ class WorkflowCostStats:
             trace: Workflow trace to incorporate into statistics
         """
         # Import here to avoid circular dependency
-        from mm_orch.observability.tracer import WorkflowTrace
 
         n = self.execution_count
 

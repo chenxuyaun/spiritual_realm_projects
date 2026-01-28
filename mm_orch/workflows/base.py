@@ -7,7 +7,7 @@ workflow execution, parameter validation, and model requirements.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import time
 import traceback
 
@@ -61,7 +61,6 @@ class BaseWorkflow(ABC):
             ValidationError: If parameters are invalid
             WorkflowError: If workflow execution fails
         """
-        pass
 
     @abstractmethod
     def validate_parameters(self, parameters: Dict[str, Any]) -> bool:
@@ -80,7 +79,6 @@ class BaseWorkflow(ABC):
         Raises:
             ValidationError: If parameters are invalid (with details)
         """
-        pass
 
     def get_required_models(self) -> List[str]:
         """

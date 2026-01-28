@@ -10,12 +10,10 @@ MuAI多模型编排系统 - 命令行接口
 import argparse
 import sys
 import uuid
-import json
 from typing import Optional, Dict, Any
 
 from mm_orch.schemas import UserRequest, WorkflowType
-from mm_orch.orchestrator import get_orchestrator, create_orchestrator
-from mm_orch.router import get_router
+from mm_orch.orchestrator import get_orchestrator
 from mm_orch.consciousness.core import get_consciousness
 from mm_orch.logger import get_logger, configure_logger
 

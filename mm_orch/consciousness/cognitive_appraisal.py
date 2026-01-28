@@ -7,12 +7,11 @@ using cognitive appraisal theory to generate emotional responses.
 Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 import time
-import math
 
-from mm_orch.consciousness.motivation import MotivationSystem, Goal, GoalStatus
+from mm_orch.consciousness.motivation import MotivationSystem, Goal
 from mm_orch.consciousness.self_model import SelfModel
 
 

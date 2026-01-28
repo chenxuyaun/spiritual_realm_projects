@@ -7,18 +7,13 @@ system restart.
 """
 
 import threading
-import time
-from dataclasses import asdict, replace
+from dataclasses import replace
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from mm_orch.logger import get_logger
 from mm_orch.optimization.config import (
-    BatcherConfig,
-    CacheConfig,
     OptimizationConfig,
-    TunerConfig,
     load_optimization_config,
 )
 
@@ -304,7 +299,6 @@ class ConfigurationManager:
         """
         # Validation is performed by dataclass __post_init__ methods
         # This method can be extended for additional validation
-        pass
 
     def _apply_non_critical_updates(
         self,

@@ -7,10 +7,9 @@
 import gc
 import logging
 import threading
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List
 
 import torch
 
@@ -21,7 +20,6 @@ try:
 except ImportError:
     HAS_PSUTIL = False
 
-from mm_orch.exceptions import OutOfMemoryError
 
 logger = logging.getLogger(__name__)
 

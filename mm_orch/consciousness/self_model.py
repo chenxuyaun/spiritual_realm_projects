@@ -7,7 +7,7 @@ The SelfModel maintains the system's self-awareness including:
 - Performance metrics and history
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 import time
 

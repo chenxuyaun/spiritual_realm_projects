@@ -9,10 +9,9 @@ timeout parameters, and cache sizes with gradual adaptation and rollback on degr
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from threading import Thread, Lock, Event
-from typing import Dict, List, Optional, Any, Callable
-import logging
+from typing import List, Optional, Any, Callable
 
 from mm_orch.logger import get_logger
 from mm_orch.optimization.config import TunerConfig

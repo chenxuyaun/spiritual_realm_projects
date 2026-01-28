@@ -17,7 +17,7 @@ Properties:
 """
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from datetime import datetime
 from dataclasses import is_dataclass, asdict
 
@@ -27,13 +27,9 @@ from mm_orch.orchestration.state import State
 class StateSerializationError(Exception):
     """Raised when State serialization fails."""
 
-    pass
-
 
 class StateDeserializationError(Exception):
     """Raised when State deserialization fails."""
-
-    pass
 
 
 def state_to_json(state: State, indent: Optional[int] = None) -> str:

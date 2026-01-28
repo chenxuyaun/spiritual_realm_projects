@@ -11,7 +11,7 @@ from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass, field
 
-from mm_orch.exceptions import ModelError, ResourceError
+from mm_orch.exceptions import ModelError
 from mm_orch.logger import get_logger
 from mm_orch.schemas import ModelConfig
 
@@ -278,7 +278,6 @@ class ModelManager:
                 if self.enable_quantization and config.quantization:
                     try:
                         # 尝试导入bitsandbytes
-                        import bitsandbytes as bnb
                         from transformers import BitsAndBytesConfig
 
                         if config.quantization == "8bit":
@@ -750,7 +749,7 @@ class ModelManager:
             # 移动到正确的设备
             if cached.device == "cuda":
                 try:
-                    import torch
+                    pass
 
                     encoded = {k: v.to("cuda") for k, v in encoded.items()}
                 except Exception:

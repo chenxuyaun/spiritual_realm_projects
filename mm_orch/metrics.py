@@ -11,7 +11,7 @@ import time
 import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional
 from enum import Enum
 from contextlib import contextmanager
 import statistics

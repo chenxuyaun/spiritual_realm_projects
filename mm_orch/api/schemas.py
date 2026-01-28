@@ -8,7 +8,7 @@ API请求和响应数据模型
 属性35: API错误响应格式
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 import time

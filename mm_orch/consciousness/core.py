@@ -14,7 +14,6 @@ from typing import Any, Dict, Optional
 import time
 import json
 import os
-import uuid
 
 from mm_orch.schemas import SystemEvent, Task, StrategySuggestion, Evaluation, ConsciousnessState
 from mm_orch.consciousness.self_model import SelfModel

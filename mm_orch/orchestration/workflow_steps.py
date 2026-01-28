@@ -6,7 +6,6 @@ functionality to work with the new graph-based execution model.
 """
 
 from typing import Any, Dict, List, TYPE_CHECKING
-import time
 
 from mm_orch.orchestration.base_step import BaseStep
 from mm_orch.orchestration.state import State
@@ -892,7 +891,6 @@ class LessonExplainStep(BaseStep):
         Returns:
             Dictionary with lesson_explain_structured or teaching_text
         """
-        from mm_orch.workflows.lesson_structure import StructuredLesson
 
         topic = state["lesson_topic"]
         objectives = state.get("lesson_objectives", [])

@@ -6,7 +6,7 @@ for optimizing multi-turn conversation inference in transformer models.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Any, List
+from typing import Optional, Any, List
 from datetime import datetime
 from collections import OrderedDict
 import logging

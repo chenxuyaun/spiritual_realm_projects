@@ -1,7 +1,7 @@
 """Quality signals calculation for workflow executions."""
 
 from dataclasses import dataclass
-from typing import Dict, Any, List, TYPE_CHECKING
+from typing import Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mm_orch.observability.tracer import WorkflowTrace
@@ -31,7 +31,6 @@ class QualitySignals:
             QualitySignals with calculated metrics
         """
         # Import here to avoid circular dependency
-        from mm_orch.observability.tracer import WorkflowTrace
 
         citations = state.get("citations", [])
         final_answer = state.get("final_answer", "")

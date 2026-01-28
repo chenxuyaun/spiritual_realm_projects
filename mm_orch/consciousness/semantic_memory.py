@@ -23,7 +23,6 @@ from mm_orch.consciousness.knowledge_graph import (
     KnowledgeGraph,
     ConceptNode,
     Relationship,
-    KnowledgeGraphConfig,
 )
 from mm_orch.consciousness.episodic_memory import Episode
 

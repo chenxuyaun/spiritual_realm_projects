@@ -13,10 +13,9 @@ import sys
 import traceback
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Callable, Dict, List, Optional
 
 from mm_orch.exceptions import (
-    MuAIError,
     ValidationError,
     ResourceError,
     NetworkError,

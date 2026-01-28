@@ -1,6 +1,5 @@
 """OpenTelemetry distributed tracing for request flow analysis."""
 
-import logging
 import threading
 from contextlib import contextmanager
 from typing import Dict, Any, Optional, TYPE_CHECKING
@@ -72,7 +71,6 @@ class InMemorySpanExporter:
 
     def shutdown(self):
         """Shutdown the exporter."""
-        pass
 
     def force_flush(self, timeout_millis: int = 30000):
         """Force flush any buffered spans."""

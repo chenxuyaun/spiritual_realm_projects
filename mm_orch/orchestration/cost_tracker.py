@@ -9,7 +9,7 @@ This module provides cost tracking functionality for workflow steps, including:
 """
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, Dict, Any
 import torch
 

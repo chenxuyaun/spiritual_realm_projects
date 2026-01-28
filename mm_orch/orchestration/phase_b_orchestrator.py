@@ -11,7 +11,7 @@ This module provides an enhanced orchestrator that integrates:
 Requirements: 22.1, 22.2, 23.1
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from dataclasses import dataclass
 import time
 from pathlib import Path
@@ -20,9 +20,8 @@ from mm_orch.schemas import UserRequest, WorkflowResult, WorkflowType
 from mm_orch.orchestration.graph_executor import GraphExecutor, SimpleTracer
 from mm_orch.orchestration.state import State
 from mm_orch.orchestration.config_fallback import get_config_manager, ConfigFallbackResult
-from mm_orch.orchestration.compatibility import LegacyRuntime, execute_legacy_workflow
+from mm_orch.orchestration.compatibility import LegacyRuntime
 from mm_orch.registries.workflow_registry import WorkflowRegistry
-from mm_orch.workflows.base import BaseWorkflow
 from mm_orch.logger import get_logger
 from mm_orch.exceptions import OrchestrationError
 

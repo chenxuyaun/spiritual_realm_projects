@@ -8,7 +8,7 @@ validation, and supports multiple execution providers (CUDA, TensorRT, CPU).
 
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 import tempfile
 import shutil
 

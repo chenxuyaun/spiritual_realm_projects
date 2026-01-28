@@ -6,10 +6,9 @@ error rates, resource usage, and throughput. Alerts are sent to configured desti
 with rate limiting to prevent alert storms.
 """
 
-import time
 import json
 import logging
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from threading import Lock
 from typing import Dict, List, Optional, Any

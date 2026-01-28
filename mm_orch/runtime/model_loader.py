@@ -6,7 +6,7 @@
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional
 
 import torch
 
@@ -14,15 +14,13 @@ try:
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
-        PreTrainedModel,
-        PreTrainedTokenizer,
     )
 
     HAS_TRANSFORMERS = True
 except ImportError:
     HAS_TRANSFORMERS = False
 
-from mm_orch.exceptions import ModelLoadError, OutOfMemoryError, QuantizationError
+from mm_orch.exceptions import ModelLoadError, OutOfMemoryError
 from mm_orch.runtime.quantization import QuantizationManager
 
 logger = logging.getLogger(__name__)

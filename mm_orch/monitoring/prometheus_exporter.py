@@ -1,9 +1,7 @@
 """Prometheus metrics exporter for system monitoring."""
 
-import logging
 import threading
 from typing import Dict, Optional
-from datetime import datetime
 
 try:
     from prometheus_client import (
