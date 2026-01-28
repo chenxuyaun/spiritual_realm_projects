@@ -5,7 +5,7 @@ This module provides Step implementations that wrap existing workflow
 functionality to work with the new graph-based execution model.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, TYPE_CHECKING
 import time
 
 from mm_orch.orchestration.base_step import BaseStep
@@ -14,6 +14,8 @@ from mm_orch.tools.web_search import WebSearchTool, get_web_search_tool
 from mm_orch.tools.fetch_url import URLFetchTool, get_url_fetch_tool
 from mm_orch.logger import get_logger
 
+if TYPE_CHECKING:
+    from mm_orch.workflows.lesson_structure import StructuredLesson
 
 logger = get_logger(__name__)
 
@@ -940,7 +942,6 @@ class LessonExplainStep(BaseStep):
         Returns:
             Dictionary with lesson_explain_structured or teaching_text
         """
-        import json
         from mm_orch.workflows.lesson_structure import StructuredLesson
         
         topic = state["lesson_topic"]
@@ -1160,7 +1161,6 @@ Please output JSON directly without additional explanatory text:"""
         Returns:
             JSON string with template lesson
         """
-        import json
         from mm_orch.workflows.lesson_structure import StructuredLesson, LessonSection
         
         if language == "zh":

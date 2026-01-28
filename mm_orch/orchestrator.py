@@ -8,7 +8,7 @@ WorkflowOrchestrator负责协调工作流执行、意识模块交互和资源管
 属性4: 结果结构完整性
 """
 
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 import time
 import traceback
@@ -20,7 +20,6 @@ from mm_orch.schemas import (
     WorkflowType,
     SystemEvent,
     Task,
-    ErrorResponse,
 )
 from mm_orch.workflows.base import BaseWorkflow
 from mm_orch.workflows.search_qa import SearchQAWorkflow

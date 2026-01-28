@@ -289,7 +289,12 @@ class TestConcurrentRequests:
                 )
             
             elapsed = time.time() - start_time
-            throughput = num_requests / elapsed
+            
+            # Avoid division by zero if elapsed is too small
+            if elapsed > 0:
+                throughput = num_requests / elapsed
+            else:
+                throughput = num_requests  # Assume 1 second if too fast
             
             # Verify: Reasonable throughput
             assert throughput > 0
