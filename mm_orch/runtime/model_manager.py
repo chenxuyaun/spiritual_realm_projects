@@ -44,6 +44,8 @@ class CachedModel:
     tokenizer: Any
     config: ModelConfig
     device: str
+    backend_type: str = "pytorch"  # Backend used to load this model
+    backend_instance: Optional[Any] = None  # Backend instance for inference
     loaded_at: float = field(default_factory=time.time)
     last_used: float = field(default_factory=time.time)
     use_count: int = 0
@@ -79,6 +81,8 @@ class ModelManager:
         residency_seconds: int = 30,
         optimization_manager: Optional[Any] = None,
         enable_optimization: bool = False,
+        backend: str = "pytorch",
+        backend_config: Optional[Dict[str, Any]] = None,
     ):
         """
         初始化模型管理器
@@ -90,6 +94,8 @@ class ModelManager:
             residency_seconds: 模型驻留时间（秒），超过此时间未使用的模型将被标记为可卸载
             optimization_manager: Optional OptimizationManager for advanced inference
             enable_optimization: Whether to use OptimizationManager when available
+            backend: Default inference backend ('pytorch' or 'openvino')
+            backend_config: Optional backend configuration dictionary or path to config file
         """
         self.max_cached_models = max_cached_models
         self.default_device = default_device
@@ -100,11 +106,44 @@ class ModelManager:
         self.optimization_manager = optimization_manager
         self.enable_optimization = enable_optimization and OPTIMIZATION_AVAILABLE
 
+        # 日志记录器 (moved up to use in backend initialization)
+        self._logger = get_logger()
+
         if enable_optimization and not OPTIMIZATION_AVAILABLE:
             self._logger.warning(
                 "Optimization requested but optimization module not available. "
                 "Falling back to standard inference."
             )
+
+        # Backend support (Requirements 1.1, 1.2, 3.1)
+        from mm_orch.runtime.backend_factory import BackendFactory
+        from mm_orch.runtime.backend_config import BackendConfig
+        
+        self._backend_factory = BackendFactory()
+        
+        # Load backend configuration
+        if isinstance(backend_config, str):
+            # backend_config is a path to config file
+            self._backend_config_loader = BackendConfig(backend_config)
+        elif backend_config is None:
+            # Use default config path
+            self._backend_config_loader = BackendConfig()
+        else:
+            # backend_config is a dictionary - create a temporary config object
+            self._backend_config_loader = BackendConfig()
+            self._backend_config_loader._config = backend_config
+        
+        # Set default backend (use config default if backend param is 'pytorch')
+        if backend == "pytorch":
+            # Check if config specifies a different default
+            self.default_backend = self._backend_config_loader.get_default_backend()
+        else:
+            self.default_backend = backend
+        
+        self._logger.info(
+            f"ModelManager initialized with backend: {self.default_backend}",
+            context={"available_backends": self._backend_factory.get_available_backends()}
+        )
 
         # 使用OrderedDict实现LRU缓存
         self._cache: OrderedDict[str, CachedModel] = OrderedDict()
@@ -114,9 +153,6 @@ class ModelManager:
 
         # 使用统计
         self._usage_stats: Dict[str, ModelUsageStats] = {}
-
-        # 日志记录器
-        self._logger = get_logger()
 
         # 检测可用设备
         self._cuda_available = self._check_cuda_available()
@@ -376,13 +412,19 @@ class ModelManager:
                 context={"model_path": config.model_path, "device": device},
             )
 
-    def load_model(self, model_name: str, device: Optional[str] = None) -> CachedModel:
+    def load_model(
+        self, 
+        model_name: str, 
+        device: Optional[str] = None,
+        backend_override: Optional[str] = None
+    ) -> CachedModel:
         """
         加载模型到内存
 
         Args:
             model_name: 模型标识符
             device: 目标设备 ('cuda', 'cpu', 'auto')，None使用默认值
+            backend_override: Optional backend override ('pytorch' or 'openvino')
 
         Returns:
             CachedModel对象
@@ -416,6 +458,21 @@ class ModelManager:
 
         config = self._model_configs[model_name]
 
+        # Determine which backend to use (Requirements 2.3, 5.5)
+        # Priority: backend_override > per-model config > default backend
+        selected_backend = backend_override
+        if selected_backend is None:
+            # Check for per-model backend override in configuration
+            selected_backend = self._backend_config_loader.get_model_backend(model_name)
+        if selected_backend is None:
+            # Use default backend
+            selected_backend = self.default_backend
+        
+        self._logger.info(
+            f"Loading model {model_name} with backend: {selected_backend}",
+            context={"backend_override": backend_override, "default_backend": self.default_backend}
+        )
+
         # 选择设备
         target_device = self._select_device(device or config.device)
 
@@ -427,13 +484,54 @@ class ModelManager:
                     f"Evicted LRU model: {evicted}", context={"cache_size": len(self._cache)}
                 )
 
-        # 加载模型
-        model, tokenizer = self._load_model_from_path(config, target_device)
-
-        # 创建缓存条目
-        cached_model = CachedModel(
-            model=model, tokenizer=tokenizer, config=config, device=target_device
-        )
+        # Load model using selected backend
+        try:
+            # Get backend configuration
+            backend_config = self._backend_config_loader.get_backend_config(selected_backend)
+            
+            # Create backend instance
+            backend_instance = self._backend_factory.create_backend(
+                backend_type=selected_backend,
+                device=target_device,
+                config=backend_config
+            )
+            
+            # Load model through backend
+            model = backend_instance.load_model(
+                model_name=model_name,
+                model_path=config.model_path,
+                model_type="transformers"  # Assuming transformers for now
+            )
+            
+            # Load tokenizer (backends don't handle tokenizers yet, so we load it directly)
+            from transformers import AutoTokenizer
+            tokenizer = AutoTokenizer.from_pretrained(config.model_path, trust_remote_code=True)
+            
+            # 创建缓存条目
+            cached_model = CachedModel(
+                model=model,
+                tokenizer=tokenizer,
+                config=config,
+                device=target_device,
+                backend_type=selected_backend,
+                backend_instance=backend_instance
+            )
+            
+        except Exception as e:
+            # If backend loading fails, fall back to legacy loading for backward compatibility
+            self._logger.warning(
+                f"Backend loading failed for {model_name}, falling back to legacy loading: {e}"
+            )
+            model, tokenizer = self._load_model_from_path(config, target_device)
+            
+            cached_model = CachedModel(
+                model=model,
+                tokenizer=tokenizer,
+                config=config,
+                device=target_device,
+                backend_type="pytorch",  # Legacy loading uses PyTorch
+                backend_instance=None
+            )
 
         # 添加到缓存
         self._cache[model_name] = cached_model
@@ -454,7 +552,11 @@ class ModelManager:
 
         self._logger.info(
             f"Model cached: {model_name}",
-            context={"device": target_device, "cache_size": len(self._cache)},
+            context={
+                "device": target_device, 
+                "cache_size": len(self._cache),
+                "backend": cached_model.backend_type
+            },
         )
 
         return cached_model
@@ -733,6 +835,58 @@ class ModelManager:
             tokenizer = cached.tokenizer
             config = cached.config
 
+            # Use backend inference if available (Requirements 5.1, 5.2)
+            if cached.backend_instance is not None:
+                # Backend-based inference
+                try:
+                    # 准备输入
+                    if isinstance(inputs, str):
+                        prompt = inputs
+                    else:
+                        # For multiple inputs, process first one (backends typically handle single prompts)
+                        prompt = inputs[0] if inputs else ""
+                    
+                    # 设置生成参数
+                    max_length = kwargs.get("max_new_tokens", 256)
+                    temperature = kwargs.get("temperature", config.temperature)
+                    
+                    # Generate using backend
+                    output = cached.backend_instance.generate(
+                        model=model,
+                        tokenizer=tokenizer,
+                        prompt=prompt,
+                        max_length=max_length,
+                        temperature=temperature,
+                        **{k: v for k, v in kwargs.items() if k not in ['max_new_tokens', 'temperature']}
+                    )
+                    
+                    # 更新使用统计
+                    cached.update_usage()
+                    
+                    # 记录推理时间
+                    inference_time = time.time() - inference_start
+                    if model_name in self._usage_stats:
+                        self._usage_stats[model_name].total_inference_time += inference_time
+                        self._usage_stats[model_name].last_used = time.time()
+                    
+                    # 更新VRAM峰值
+                    if cached.device == "cuda":
+                        used_vram, _ = self._get_gpu_memory_info()
+                        if model_name in self._usage_stats:
+                            self._usage_stats[model_name].peak_vram_mb = max(
+                                self._usage_stats[model_name].peak_vram_mb,
+                                int(used_vram * 1024),  # Convert GB to MB
+                            )
+                    
+                    return output
+                    
+                except Exception as e:
+                    # If backend inference fails, fall back to legacy inference
+                    self._logger.warning(
+                        f"Backend inference failed for {model_name}, falling back to legacy: {e}"
+                    )
+
+            # Legacy inference path (original implementation)
             # 准备输入
             if isinstance(inputs, str):
                 inputs = [inputs]
@@ -863,6 +1017,8 @@ class ModelManager:
             "registered_models": len(self._model_configs),
             "cuda_available": self._cuda_available,
             "residency_seconds": self.residency_seconds,
+            "default_backend": self.default_backend,
+            "available_backends": self._backend_factory.get_available_backends(),
             "models": {},
         }
 
@@ -870,6 +1026,7 @@ class ModelManager:
             stats = self._usage_stats.get(name, ModelUsageStats())
             info["models"][name] = {
                 "device": cached.device,
+                "backend": cached.backend_type,
                 "loaded_at": cached.loaded_at,
                 "last_used": cached.last_used,
                 "use_count": cached.use_count,
@@ -924,7 +1081,11 @@ _global_model_manager: Optional[ModelManager] = None
 
 
 def get_model_manager(
-    max_cached_models: int = 3, default_device: str = "auto", residency_seconds: int = 30
+    max_cached_models: int = 3, 
+    default_device: str = "auto", 
+    residency_seconds: int = 30,
+    backend: str = "pytorch",
+    backend_config: Optional[Dict[str, Any]] = None,
 ) -> ModelManager:
     """
     获取全局模型管理器实例
@@ -933,6 +1094,8 @@ def get_model_manager(
         max_cached_models: 最大缓存模型数量
         default_device: 默认设备
         residency_seconds: 模型驻留时间（秒）
+        backend: Default inference backend ('pytorch' or 'openvino')
+        backend_config: Optional backend configuration dictionary or path to config file
 
     Returns:
         ModelManager实例
@@ -945,6 +1108,8 @@ def get_model_manager(
             default_device=default_device,
             residency_seconds=residency_seconds,
             enable_optimization=False,  # Default to disabled for backward compatibility
+            backend=backend,
+            backend_config=backend_config,
         )
 
     return _global_model_manager
@@ -957,6 +1122,8 @@ def configure_model_manager(
     residency_seconds: int = 30,
     optimization_manager: Optional[Any] = None,
     enable_optimization: bool = False,
+    backend: str = "pytorch",
+    backend_config: Optional[Dict[str, Any]] = None,
 ) -> ModelManager:
     """
     配置全局模型管理器
@@ -968,6 +1135,8 @@ def configure_model_manager(
         residency_seconds: 模型驻留时间（秒）
         optimization_manager: Optional OptimizationManager for advanced inference
         enable_optimization: Whether to use OptimizationManager when available
+        backend: Default inference backend ('pytorch' or 'openvino')
+        backend_config: Optional backend configuration dictionary or path to config file
 
     Returns:
         配置后的ModelManager实例
@@ -980,5 +1149,7 @@ def configure_model_manager(
         residency_seconds=residency_seconds,
         optimization_manager=optimization_manager,
         enable_optimization=enable_optimization,
+        backend=backend,
+        backend_config=backend_config,
     )
     return _global_model_manager

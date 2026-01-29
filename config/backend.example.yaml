@@ -1,0 +1,104 @@
+# =============================================================================
+# Backend Configuration Example
+# OpenVINO Backend Integration
+# =============================================================================
+#
+# This file demonstrates backend configuration for the MuAI system.
+# Copy this file to config/system.yaml and modify as needed.
+#
+# =============================================================================
+
+# Backend configuration
+backend:
+  # Default backend for all models
+  # Options: 'pytorch' or 'openvino'
+  default: pytorch
+  
+  # OpenVINO-specific configuration
+  openvino:
+    # Device to use for inference
+    # Options: 'CPU', 'GPU', 'AUTO'
+    # - CPU: Use CPU for inference (good compatibility)
+    # - GPU: Use integrated GPU (Intel iGPU) for inference (faster)
+    # - AUTO: Let OpenVINO choose the best device automatically
+    device: CPU
+    
+    # Enable automatic fallback to PyTorch on OpenVINO failures
+    # When true, if OpenVINO fails to load or run a model, the system
+    # will automatically fall back to PyTorch backend
+    enable_fallback: true
+    
+    # Directory for OpenVINO model cache
+    # Exported OpenVINO models will be stored here
+    cache_dir: models/openvino
+    
+    # Number of parallel inference streams
+    # Higher values can improve throughput on multi-core CPUs
+    # Recommended: 1-4 for most systems
+    num_streams: 1
+  
+  # PyTorch-specific configuration
+  pytorch:
+    # Device to use for inference
+    # Options: 'cpu', 'cuda', 'auto'
+    # - cpu: Use CPU for inference
+    # - cuda: Use NVIDIA GPU for inference (requires CUDA)
+    # - auto: Automatically detect and use GPU if available
+    device: cpu
+    
+    # Data type for model weights
+    # Options: 'float32', 'float16', 'bfloat16'
+    # - float32: Full precision (best quality, slower)
+    # - float16: Half precision (faster, less memory, slight quality loss)
+    # - bfloat16: Brain float (good balance, requires newer hardware)
+    dtype: float32
+
+# Per-model backend overrides
+# Specify which backend to use for specific models
+# This overrides the default backend setting
+model_overrides:
+  # Example: Use OpenVINO for GPT-2 (faster inference)
+  # gpt2: openvino
+  
+  # Example: Use PyTorch for T5 (better compatibility)
+  # t5-small: pytorch
+  
+  # Example: Use OpenVINO for DistilGPT-2
+  # distilgpt2: openvino
+
+# =============================================================================
+# Usage Examples
+# =============================================================================
+#
+# 1. Use OpenVINO for all models:
+#    backend:
+#      default: openvino
+#
+# 2. Use OpenVINO with GPU acceleration:
+#    backend:
+#      openvino:
+#        device: GPU
+#
+# 3. Use OpenVINO for specific models only:
+#    backend:
+#      default: pytorch
+#    model_overrides:
+#      gpt2: openvino
+#      distilgpt2: openvino
+#
+# 4. Disable automatic fallback (fail fast):
+#    backend:
+#      openvino:
+#        enable_fallback: false
+#
+# =============================================================================
+# Performance Tips
+# =============================================================================
+#
+# - OpenVINO typically provides 2-3x speedup on CPU compared to PyTorch
+# - GPU device can provide 3-5x speedup on systems with Intel iGPU
+# - Use num_streams > 1 for batch processing or concurrent requests
+# - Export models to OpenVINO format first using:
+#   python scripts/export_to_openvino.py <model_name>
+#
+# =============================================================================

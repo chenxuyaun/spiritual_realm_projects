@@ -57,6 +57,10 @@ from mm_orch.runtime.conversation import (
     Message,
 )
 
+from mm_orch.runtime.inference_backend import (
+    InferenceBackend,
+)
+
 __all__ = [
     # Model Manager (Mock)
     "ModelManager",
@@ -96,4 +100,6 @@ __all__ = [
     "ConversationManager",
     "Conversation",
     "Message",
+    # Inference Backend
+    "InferenceBackend",
 ]
