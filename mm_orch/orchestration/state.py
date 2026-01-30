@@ -67,7 +67,7 @@ class State(TypedDict, total=False):
     lesson_objectives: List[str]
     lesson_outline: List[str]
     board_plan: List[str]
-    lesson_explain_structured: Dict[str, Any]
+    lesson_explain_structured: Optional[Dict[str, Any]]  # NEW: Structured JSON lesson content
     teaching_text: str
     exercises: List[Dict[str, str]]
 

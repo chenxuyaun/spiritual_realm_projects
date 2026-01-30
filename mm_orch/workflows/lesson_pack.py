@@ -4,7 +4,7 @@ LessonPack Workflow Implementation.
 This module implements the LessonPack workflow which generates
 educational content packages including:
 1. Teaching plan/outline
-2. Detailed explanation content
+2. Detailed explanation content (with optional structured JSON)
 3. Practice exercises with answers
 
 The workflow ensures output conforms to the LessonPack data structure.
@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from dataclasses import dataclass, field
 import time
 import re
+import json
 
 from mm_orch.workflows.base import BaseWorkflow
 from mm_orch.schemas import WorkflowResult, WorkflowType, LessonPack
@@ -117,6 +118,58 @@ Answer 2: [answer content]
 Exercises:"""
 
 
+# NEW: Structured JSON prompts for lesson explanation
+LESSON_EXPLANATION_STRUCTURED_PROMPT_ZH = """你是一名专业的教育内容设计师。请根据下面的教学计划生成一份结构化的课堂讲解方案。
+
+【课题】
+{topic}
+
+【教学计划】
+{plan}
+
+要求：
+1. 输出为一个合法的 JSON 对象，不要添加任何解释文字或多余内容
+2. JSON 格式：
+{{
+  "topic": "课题名称",
+  "sections": [
+    {{
+      "name": "环节名称（如：导入、新授、练习、小结）",
+      "content": "该环节的详细讲解内容"
+    }}
+  ]
+}}
+
+请只输出 JSON，不要包含反引号、注释或其它文本。
+
+JSON输出："""
+
+LESSON_EXPLANATION_STRUCTURED_PROMPT_EN = """You are a professional educational content designer. Please generate a structured lesson explanation based on the teaching plan below.
+
+【Topic】
+{topic}
+
+【Teaching Plan】
+{plan}
+
+Requirements:
+1. Output as a valid JSON object, do not add any explanatory text or extra content
+2. JSON format:
+{{
+  "topic": "topic name",
+  "sections": [
+    {{
+      "name": "section name (e.g., Introduction, Main Content, Practice, Summary)",
+      "content": "detailed explanation content for this section"
+    }}
+  ]
+}}
+
+Please output only JSON, without backticks, comments, or other text.
+
+JSON output:"""
+
+
 @dataclass
 class LessonPackStep:
     """Tracks the execution of a workflow step."""
@@ -137,6 +190,7 @@ class LessonPackContext:
     language: str = "zh"
     plan: str = ""
     explanation: str = ""
+    lesson_explain_structured: Optional[Dict[str, Any]] = None  # NEW: Structured JSON
     exercises: List[Dict[str, str]] = field(default_factory=list)
     steps: List[LessonPackStep] = field(default_factory=list)
 
@@ -351,6 +405,190 @@ class LessonPackWorkflow(BaseWorkflow):
         return ctx
 
     def _step_generate_explanation(
+        self, ctx: LessonPackContext, include_examples: bool
+    ) -> LessonPackContext:
+        """
+        Step 2: Generate detailed explanation content.
+        
+        Attempts to generate structured JSON format, falls back to plain text if parsing fails.
+
+        Args:
+            ctx: Workflow context with plan
+            include_examples: Whether to include examples
+
+        Returns:
+            Updated context with explanation and optionally structured JSON
+        """
+        start_time = time.time()
+        step = LessonPackStep(name="generate_explanation", success=False)
+
+        try:
+            logger.info(f"Step 2: Generating explanation for '{ctx.topic[:50]}...'")
+
+            # Try to generate structured JSON first (best effort)
+            raw_text = self._generate_explanation_structured_attempt(
+                ctx.topic, ctx.plan, ctx.difficulty, ctx.language
+            )
+            
+            # Try to parse as JSON
+            structured = self._parse_structured_explanation(raw_text)
+            
+            if structured:
+                # Success: Store structured JSON and render to text
+                ctx.lesson_explain_structured = structured
+                ctx.explanation = self._render_structured_to_text(structured, ctx.language)
+                step.success = True
+                logger.info(f"Generated structured explanation with {len(structured.get('sections', []))} sections")
+            else:
+                # Fallback: Generate plain text explanation
+                logger.info("Structured JSON parsing failed, falling back to plain text")
+                explanation = self._generate_explanation(
+                    ctx.topic, ctx.plan, ctx.difficulty, ctx.language, include_examples
+                )
+                ctx.explanation = explanation
+                ctx.lesson_explain_structured = None
+                step.success = bool(explanation)
+                logger.info(f"Generated plain text explanation of length {len(explanation)}")
+
+        except Exception as e:
+            step.error = str(e)
+            logger.error(f"Explanation generation failed: {e}")
+
+        step.duration = time.time() - start_time
+        ctx.add_step(step)
+        return ctx
+    
+    def _generate_explanation_structured_attempt(
+        self, topic: str, plan: str, difficulty: str, language: str
+    ) -> str:
+        """
+        Attempt to generate structured JSON explanation.
+        
+        Args:
+            topic: The lesson topic
+            plan: Teaching plan
+            difficulty: Difficulty level
+            language: Output language
+            
+        Returns:
+            Generated text (may or may not be valid JSON)
+        """
+        # Use real models if available
+        if self.use_real_models and self.inference_engine:
+            try:
+                # Select structured prompt
+                if language == "zh":
+                    prompt = LESSON_EXPLANATION_STRUCTURED_PROMPT_ZH.format(
+                        topic=topic,
+                        plan=plan[:800]
+                    )
+                else:
+                    prompt = LESSON_EXPLANATION_STRUCTURED_PROMPT_EN.format(
+                        topic=topic,
+                        plan=plan[:800]
+                    )
+                
+                from mm_orch.runtime.inference_engine import GenerationConfig
+                config = GenerationConfig(
+                    max_new_tokens=1200,
+                    temperature=0.5,  # Lower temperature for more structured output
+                    top_p=0.9,
+                    repetition_penalty=1.1
+                )
+                
+                result = self.inference_engine.generate(prompt, config=config)
+                return result.text.strip()
+                
+            except Exception as e:
+                logger.warning(f"Real model structured generation failed: {e}")
+                return ""
+        
+        # Mock model doesn't support structured output well
+        return ""
+    
+    def _parse_structured_explanation(self, text: str) -> Optional[Dict[str, Any]]:
+        """
+        Parse generated text as structured JSON.
+        
+        Args:
+            text: Generated text
+            
+        Returns:
+            Parsed JSON dict or None if parsing fails
+        """
+        if not text:
+            return None
+        
+        # Clean text
+        text = text.strip()
+        
+        # Remove markdown code blocks if present
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+        
+        # Try to parse JSON
+        try:
+            data = json.loads(text)
+            
+            # Validate required fields
+            if not isinstance(data, dict):
+                return None
+            if "sections" not in data or not isinstance(data["sections"], list):
+                return None
+            
+            # Validate each section has required fields
+            for section in data["sections"]:
+                if not isinstance(section, dict):
+                    return None
+                if "name" not in section or "content" not in section:
+                    return None
+            
+            logger.info(f"Successfully parsed structured JSON with {len(data['sections'])} sections")
+            return data
+            
+        except json.JSONDecodeError as e:
+            logger.debug(f"JSON parse failed: {e}")
+            return None
+    
+    def _render_structured_to_text(self, structured: Dict[str, Any], language: str) -> str:
+        """
+        Render structured JSON to plain text explanation.
+        
+        Args:
+            structured: Structured lesson JSON
+            language: Output language
+            
+        Returns:
+            Plain text explanation
+        """
+        lines = []
+        
+        # Add topic header
+        topic = structured.get("topic", "")
+        if topic:
+            lines.append(f"# {topic}")
+            lines.append("")
+        
+        # Render each section
+        for i, section in enumerate(structured.get("sections", []), 1):
+            name = section.get("name", f"Section {i}")
+            content = section.get("content", "")
+            
+            lines.append(f"## {name}")
+            lines.append("")
+            
+            if content:
+                lines.append(content)
+                lines.append("")
+        
+        return "\n".join(lines)
+
+    def _step_generate_explanation_old(
         self, ctx: LessonPackContext, include_examples: bool
     ) -> LessonPackContext:
         """
@@ -1163,11 +1401,16 @@ Exercises:"""
             "language": ctx.language,
             "num_exercises_requested": ctx.num_exercises,
             "num_exercises_generated": len(ctx.exercises),
+            "has_structured_output": ctx.lesson_explain_structured is not None,  # NEW
             "steps": [
                 {"name": s.name, "success": s.success, "duration": s.duration, "error": s.error}
                 for s in ctx.steps
             ],
         }
+        
+        # NEW: Include structured JSON in metadata if available
+        if ctx.lesson_explain_structured:
+            metadata["lesson_explain_structured"] = ctx.lesson_explain_structured
 
         # Build result as LessonPack-compatible dictionary
         result = None

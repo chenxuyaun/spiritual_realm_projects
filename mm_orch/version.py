@@ -4,13 +4,13 @@ Version information for MuAI Orchestration System.
 This module provides version information that can be imported by other modules.
 """
 
-__version__ = "1.0.0-rc1"
-__version_info__ = (1, 0, 0, "rc1")
+__version__ = "1.0.0"
+__version_info__ = (1, 0, 0)
 
 # Release information
-RELEASE_NAME = "First Release Candidate"
+RELEASE_NAME = "First Stable Release"
 RELEASE_DATE = "2026-01-30"
-RELEASE_STATUS = "rc"  # alpha, beta, rc, stable
+RELEASE_STATUS = "stable"  # alpha, beta, rc, stable
 
 # Build information
 BUILD_NUMBER = "20260130"
@@ -29,7 +29,8 @@ FEATURES = {
     "openvino_backend": True,
     "phase_b_architecture": True,
     "router_v3": True,
-    "structured_lesson_output": False,  # Planned for v1.1.0
+    "router_v3_mode_chat": True,  # NEW: Verified and working
+    "structured_lesson_output": True,  # NEW: MVP implemented
 }
 
 
