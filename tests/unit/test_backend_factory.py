@@ -17,16 +17,17 @@ import sys
 
 from mm_orch.runtime.backend_factory import BackendFactory
 from mm_orch.runtime.inference_backend import InferenceBackend
+from mm_orch.runtime.backend_exceptions import ConfigurationError
 
 
 class TestBackendFactoryValidation:
     """Test backend parameter validation."""
     
     def test_invalid_backend_name_raises_value_error(self):
-        """Test that invalid backend names raise ValueError."""
+        """Test that invalid backend names raise ConfigurationError."""
         factory = BackendFactory()
         
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ConfigurationError) as exc_info:
             factory.create_backend('invalid_backend', 'cpu', {})
         
         error_message = str(exc_info.value)
@@ -34,34 +35,34 @@ class TestBackendFactoryValidation:
         assert 'invalid_backend' in error_message
     
     def test_empty_backend_name_raises_value_error(self):
-        """Test that empty backend name raises ValueError."""
+        """Test that empty backend name raises ConfigurationError."""
         factory = BackendFactory()
         
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigurationError):
             factory.create_backend('', 'cpu', {})
     
     def test_none_backend_name_raises_error(self):
         """Test that None backend name raises appropriate error."""
         factory = BackendFactory()
         
-        with pytest.raises((ValueError, TypeError, AttributeError)):
+        with pytest.raises((ConfigurationError, TypeError, AttributeError)):
             factory.create_backend(None, 'cpu', {})
 
     def test_uppercase_backend_name_raises_value_error(self):
         """Test that uppercase backend names are rejected (case-sensitive)."""
         factory = BackendFactory()
         
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigurationError):
             factory.create_backend('PYTORCH', 'cpu', {})
         
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigurationError):
             factory.create_backend('PyTorch', 'cpu', {})
     
     def test_error_message_includes_valid_backends(self):
         """Test that error messages mention valid backend options."""
         factory = BackendFactory()
         
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ConfigurationError) as exc_info:
             factory.create_backend('tensorflow', 'cpu', {})
         
         error_message = str(exc_info.value)
@@ -72,7 +73,7 @@ class TestBackendFactoryValidation:
         """Test that error messages include available backends on system."""
         factory = BackendFactory()
         
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ConfigurationError) as exc_info:
             factory.create_backend('invalid', 'cpu', {})
         
         error_message = str(exc_info.value)
@@ -195,14 +196,14 @@ class TestBackendFactoryEdgeCases:
         ]
         
         for name in invalid_names:
-            with pytest.raises(ValueError):
+            with pytest.raises(ConfigurationError):
                 factory.create_backend(name, 'cpu', {})
     
     def test_create_backend_with_numeric_name(self):
         """Test that numeric backend names are rejected."""
         factory = BackendFactory()
         
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigurationError):
             factory.create_backend('123', 'cpu', {})
     
     def test_create_backend_with_whitespace_name(self):
@@ -218,23 +219,23 @@ class TestBackendFactoryEdgeCases:
         ]
         
         for name in invalid_names:
-            with pytest.raises(ValueError):
+            with pytest.raises(ConfigurationError):
                 factory.create_backend(name, 'cpu', {})
 
     def test_create_backend_accepts_various_device_values(self):
         """Test that various device values are accepted (validation is backend-specific)."""
         factory = BackendFactory()
         
-        # These should not raise ValueError for invalid backend type
+        # These should not raise ConfigurationError for invalid backend type
         # (they may raise other errors when trying to import backends)
         devices = ['cpu', 'cuda', 'GPU', 'CPU', 'AUTO']
         
         for device in devices:
-            with pytest.raises((ValueError, RuntimeError, ImportError)) as exc_info:
+            with pytest.raises((ConfigurationError, RuntimeError, ImportError)) as exc_info:
                 factory.create_backend('invalid_backend', device, {})
             
-            # Should be ValueError for invalid backend, not device
-            assert isinstance(exc_info.value, ValueError)
+            # Should be ConfigurationError for invalid backend, not device
+            assert isinstance(exc_info.value, ConfigurationError)
             assert 'Invalid backend type' in str(exc_info.value)
     
     def test_create_backend_accepts_various_config_values(self):
@@ -249,11 +250,11 @@ class TestBackendFactoryEdgeCases:
         ]
         
         for config in configs:
-            with pytest.raises((ValueError, RuntimeError, ImportError)) as exc_info:
+            with pytest.raises((ConfigurationError, RuntimeError, ImportError)) as exc_info:
                 factory.create_backend('invalid_backend', 'cpu', config)
             
-            # Should be ValueError for invalid backend, not config
-            assert isinstance(exc_info.value, ValueError)
+            # Should be ConfigurationError for invalid backend, not config
+            assert isinstance(exc_info.value, ConfigurationError)
             assert 'Invalid backend type' in str(exc_info.value)
 
 
@@ -264,7 +265,7 @@ class TestBackendFactoryErrorMessages:
         """Test that error messages are descriptive and helpful."""
         factory = BackendFactory()
         
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ConfigurationError) as exc_info:
             factory.create_backend('tensorflow', 'cpu', {})
         
         error_message = str(exc_info.value)
@@ -282,7 +283,7 @@ class TestBackendFactoryErrorMessages:
         """Test that error messages suggest valid alternatives."""
         factory = BackendFactory()
         
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ConfigurationError) as exc_info:
             factory.create_backend('torch', 'cpu', {})
         
         error_message = str(exc_info.value)
@@ -294,7 +295,7 @@ class TestBackendFactoryErrorMessages:
         """Test that error messages include system-specific information."""
         factory = BackendFactory()
         
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ConfigurationError) as exc_info:
             factory.create_backend('invalid', 'cpu', {})
         
         error_message = str(exc_info.value)
@@ -318,7 +319,7 @@ class TestBackendFactoryIntegration:
         assert isinstance(available, list)
         
         # Try to create invalid backend
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ConfigurationError) as exc_info:
             factory.create_backend('invalid', 'cpu', {})
         
         # Error should be descriptive
@@ -337,8 +338,8 @@ class TestBackendFactoryIntegration:
         assert available1 == available2
         
         # Both should reject invalid backends
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigurationError):
             factory1.create_backend('invalid', 'cpu', {})
         
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigurationError):
             factory2.create_backend('invalid', 'cpu', {})

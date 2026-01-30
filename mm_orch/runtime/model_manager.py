@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from mm_orch.exceptions import ModelError
 from mm_orch.logger import get_logger
 from mm_orch.schemas import ModelConfig
+from mm_orch.runtime.performance_monitor import PerformanceMonitor
 
 # Optional optimization support
 try:
@@ -114,6 +115,9 @@ class ModelManager:
                 "Optimization requested but optimization module not available. "
                 "Falling back to standard inference."
             )
+
+        # Performance monitoring (Requirements 7.1, 7.2, 7.3)
+        self._performance_monitor = PerformanceMonitor()
 
         # Backend support (Requirements 1.1, 1.2, 3.1)
         from mm_orch.runtime.backend_factory import BackendFactory
@@ -869,6 +873,16 @@ class ModelManager:
                         self._usage_stats[model_name].total_inference_time += inference_time
                         self._usage_stats[model_name].last_used = time.time()
                     
+                    # Record performance metrics (Requirements 7.1, 7.2)
+                    # Estimate tokens generated (rough approximation)
+                    tokens_generated = len(tokenizer.encode(output)) if output else 0
+                    self._performance_monitor.record_inference(
+                        backend=cached.backend_type,
+                        model_name=model_name,
+                        latency=inference_time,
+                        tokens=tokens_generated
+                    )
+                    
                     # 更新VRAM峰值
                     if cached.device == "cuda":
                         used_vram, _ = self._get_gpu_memory_info()
@@ -932,6 +946,16 @@ class ModelManager:
             if model_name in self._usage_stats:
                 self._usage_stats[model_name].total_inference_time += inference_time
                 self._usage_stats[model_name].last_used = time.time()
+
+            # Record performance metrics (Requirements 7.1, 7.2)
+            # Estimate tokens generated from decoded output
+            tokens_generated = sum(len(tokenizer.encode(text)) for text in decoded)
+            self._performance_monitor.record_inference(
+                backend=cached.backend_type,
+                model_name=model_name,
+                latency=inference_time,
+                tokens=tokens_generated
+            )
 
             # 更新VRAM峰值
             if cached.device == "cuda":
@@ -1061,6 +1085,42 @@ class ModelManager:
             模型配置，如果未注册则返回None
         """
         return self._model_configs.get(model_name)
+
+    def get_performance_stats(self, backend: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get performance statistics.
+        
+        Args:
+            backend: Optional backend filter ('pytorch' or 'openvino')
+                    If None, returns summary for all backends
+        
+        Returns:
+            Performance statistics dictionary
+        
+        Requirements:
+        - 7.3: Expose performance metrics through monitoring system
+        """
+        if backend is not None:
+            return self._performance_monitor.get_backend_stats(backend)
+        else:
+            return self._performance_monitor.get_summary()
+    
+    def compare_backends(self, backend1: str, backend2: str) -> Dict[str, Any]:
+        """
+        Compare performance between two backends.
+        
+        Args:
+            backend1: First backend name ('pytorch' or 'openvino')
+            backend2: Second backend name ('pytorch' or 'openvino')
+        
+        Returns:
+            Comparison dictionary with improvement ratios and statistics
+        
+        Requirements:
+        - 7.3: Expose performance metrics through monitoring system
+        - 7.4: Provide comparative metrics when both backends are used
+        """
+        return self._performance_monitor.compare_backends(backend1, backend2)
 
     def clear_cache(self) -> None:
         """清空模型缓存"""

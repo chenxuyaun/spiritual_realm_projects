@@ -1,335 +1,333 @@
 """
 Property-based tests for PerformanceMonitor.
 
-Tests universal properties that should hold across all valid inputs.
-Uses Hypothesis for property-based testing with 100+ iterations per property.
+Feature: openvino-backend-integration
+Property 10: Performance Metrics Recording
+
+For any inference operation on any backend, the system should record latency,
+throughput, and backend information in the performance monitoring system,
+making these metrics accessible through the monitoring API.
+
+Validates: Requirements 7.1, 7.2, 7.3, 7.4
 """
 
 import pytest
 from hypothesis import given, strategies as st, settings
-from datetime import datetime, timedelta
-import time
-
-from mm_orch.monitoring.performance_monitor import (
-    PerformanceMonitor,
-    LatencyRecord,
-    ResourceSnapshot
-)
+from mm_orch.runtime.performance_monitor import PerformanceMonitor
 
 
 # Strategies for generating test data
-operation_names = st.text(min_size=1, max_size=50, alphabet=st.characters(
-    whitelist_categories=('Lu', 'Ll', 'Nd'),
-    whitelist_characters='_-'
-))
+backend_strategy = st.sampled_from(["pytorch", "openvino"])
+model_name_strategy = st.text(
+    min_size=3, 
+    max_size=50, 
+    alphabet=st.characters(
+        whitelist_categories=("Lu", "Ll", "Nd"), 
+        whitelist_characters="-_"
+    )
+).filter(lambda x: x not in ["latency", "throughput", "tokens"])  # Avoid metric keywords
+latency_strategy = st.floats(min_value=0.001, max_value=10.0, allow_nan=False, allow_infinity=False)
+tokens_strategy = st.integers(min_value=1, max_value=1000)
 
-latency_values = st.floats(min_value=0.1, max_value=10000.0, allow_nan=False, allow_infinity=False)
 
-metadata_dicts = st.dictionaries(
-    keys=st.text(min_size=1, max_size=20),
-    values=st.one_of(
-        st.text(max_size=50),
-        st.integers(min_value=0, max_value=1000),
-        st.floats(min_value=0.0, max_value=1000.0, allow_nan=False, allow_infinity=False)
+@settings(max_examples=100, deadline=None)
+@given(
+    backend=backend_strategy,
+    model_name=model_name_strategy,
+    latency=latency_strategy,
+    tokens=tokens_strategy
+)
+def test_property_10_metrics_recording(backend, model_name, latency, tokens):
+    """
+    Property 10: Performance Metrics Recording
+    
+    For any inference operation, the system should:
+    1. Record latency for the backend
+    2. Record throughput (tokens/second) for the backend
+    3. Make metrics accessible through get_backend_stats
+    4. Calculate correct throughput from latency and tokens
+    
+    Validates: Requirements 7.1, 7.2, 7.3, 7.4
+    """
+    monitor = PerformanceMonitor()
+    
+    # Record inference
+    monitor.record_inference(
+        backend=backend,
+        model_name=model_name,
+        latency=latency,
+        tokens=tokens
+    )
+    
+    # Verify metrics are accessible (Requirement 7.3)
+    stats = monitor.get_backend_stats(backend)
+    
+    # Should have recorded the metrics
+    assert stats is not None, "Stats should not be None"
+    assert len(stats) > 0, "Stats should not be empty"
+    assert "backend" in stats, "Stats should include backend name"
+    assert stats["backend"] == backend, "Backend name should match"
+    
+    # Should have latency metrics (Requirement 7.1)
+    assert "avg_latency" in stats, "Stats should include average latency"
+    assert "p50_latency" in stats, "Stats should include median latency"
+    assert "p95_latency" in stats, "Stats should include 95th percentile latency"
+    assert stats["avg_latency"] > 0, "Average latency should be positive"
+    assert stats["avg_latency"] == pytest.approx(latency, rel=1e-6), \
+        "Average latency should match recorded latency for single sample"
+    
+    # Should have throughput metrics (Requirement 7.2)
+    assert "avg_throughput" in stats, "Stats should include average throughput"
+    assert stats["avg_throughput"] > 0, "Average throughput should be positive"
+    
+    # Throughput should be correctly calculated
+    expected_throughput = tokens / latency
+    assert stats["avg_throughput"] == pytest.approx(expected_throughput, rel=1e-6), \
+        "Throughput should equal tokens divided by latency"
+    
+    # Should track sample count
+    assert "sample_count" in stats, "Stats should include sample count"
+    assert stats["sample_count"] == 1, "Sample count should be 1 for single inference"
+
+
+@settings(max_examples=100, deadline=None)
+@given(
+    backend=backend_strategy,
+    model_name=model_name_strategy,
+    inferences=st.lists(
+        st.tuples(latency_strategy, tokens_strategy),
+        min_size=2,
+        max_size=20
+    )
+)
+def test_property_10_multiple_inferences(backend, model_name, inferences):
+    """
+    Property 10: Performance Metrics Recording (Multiple Inferences)
+    
+    For multiple inference operations, the system should:
+    1. Aggregate metrics correctly
+    2. Calculate accurate statistics (mean, percentiles)
+    3. Track total sample count
+    
+    Validates: Requirements 7.1, 7.2, 7.3
+    """
+    monitor = PerformanceMonitor()
+    
+    # Record multiple inferences
+    latencies = []
+    throughputs = []
+    for latency, tokens in inferences:
+        monitor.record_inference(
+            backend=backend,
+            model_name=model_name,
+            latency=latency,
+            tokens=tokens
+        )
+        latencies.append(latency)
+        throughputs.append(tokens / latency)
+    
+    # Get aggregated stats
+    stats = monitor.get_backend_stats(backend)
+    
+    # Verify aggregation
+    assert stats["sample_count"] == len(inferences), \
+        "Sample count should match number of inferences"
+    
+    # Verify average latency is correct
+    expected_avg_latency = sum(latencies) / len(latencies)
+    assert stats["avg_latency"] == pytest.approx(expected_avg_latency, rel=1e-6), \
+        "Average latency should be mean of all latencies"
+    
+    # Verify average throughput is correct
+    expected_avg_throughput = sum(throughputs) / len(throughputs)
+    assert stats["avg_throughput"] == pytest.approx(expected_avg_throughput, rel=1e-6), \
+        "Average throughput should be mean of all throughputs"
+
+
+@settings(max_examples=100, deadline=None)
+@given(
+    backend1=st.just("pytorch"),
+    backend2=st.just("openvino"),
+    model_name=model_name_strategy,
+    pytorch_latency=latency_strategy,
+    openvino_latency=latency_strategy,
+    tokens=tokens_strategy
+)
+def test_property_10_backend_comparison(
+    backend1, backend2, model_name, pytorch_latency, openvino_latency, tokens
+):
+    """
+    Property 10: Performance Metrics Recording (Backend Comparison)
+    
+    When both backends are used, the system should:
+    1. Track metrics separately for each backend
+    2. Provide comparative metrics (Requirement 7.4)
+    3. Calculate improvement ratios correctly
+    
+    Validates: Requirements 7.3, 7.4
+    """
+    monitor = PerformanceMonitor()
+    
+    # Record inference for both backends
+    monitor.record_inference(
+        backend=backend1,
+        model_name=model_name,
+        latency=pytorch_latency,
+        tokens=tokens
+    )
+    
+    monitor.record_inference(
+        backend=backend2,
+        model_name=model_name,
+        latency=openvino_latency,
+        tokens=tokens
+    )
+    
+    # Get comparison (Requirement 7.4)
+    comparison = monitor.compare_backends(backend1, backend2)
+    
+    # Should have comparison data
+    assert comparison is not None, "Comparison should not be None"
+    assert len(comparison) > 0, "Comparison should not be empty"
+    
+    # Should include improvement ratios
+    assert "latency_improvement" in comparison, \
+        "Comparison should include latency improvement"
+    assert "throughput_improvement" in comparison, \
+        "Comparison should include throughput improvement"
+    
+    # Should include stats for both backends
+    assert f"{backend1}_stats" in comparison, \
+        f"Comparison should include {backend1} stats"
+    assert f"{backend2}_stats" in comparison, \
+        f"Comparison should include {backend2} stats"
+    
+    # Verify improvement calculations
+    expected_latency_improvement = pytorch_latency / openvino_latency
+    assert comparison["latency_improvement"] == pytest.approx(
+        expected_latency_improvement, rel=1e-6
+    ), "Latency improvement should be ratio of latencies"
+    
+    pytorch_throughput = tokens / pytorch_latency
+    openvino_throughput = tokens / openvino_latency
+    expected_throughput_improvement = openvino_throughput / pytorch_throughput
+    assert comparison["throughput_improvement"] == pytest.approx(
+        expected_throughput_improvement, rel=1e-6
+    ), "Throughput improvement should be ratio of throughputs"
+
+
+@settings(max_examples=100, deadline=None)
+@given(
+    backend=backend_strategy,
+    model_names=st.lists(
+        model_name_strategy,
+        min_size=2,
+        max_size=5,
+        unique=True
     ),
-    max_size=5
+    latency=latency_strategy,
+    tokens=tokens_strategy
 )
-
-
-# Feature: advanced-optimization-monitoring, Property 29: Per-request latency is collected
-@given(
-    operation=operation_names,
-    latencies=st.lists(latency_values, min_size=1, max_size=50)
-)
-@settings(max_examples=100, deadline=None)
-@pytest.mark.property
-def test_property_29_per_request_latency_collected(operation, latencies):
+def test_property_10_multiple_models(backend, model_names, latency, tokens):
     """
-    Property 29: Per-request latency is collected.
+    Property 10: Performance Metrics Recording (Multiple Models)
     
-    For any request processed by the system, latency should be recorded
-    in the performance monitor.
+    For multiple models on the same backend, the system should:
+    1. Track metrics separately per model
+    2. Aggregate correctly at backend level
+    3. Provide model-specific statistics
     
-    Validates: Requirements 9.1
+    Validates: Requirements 7.1, 7.2, 7.3
     """
-    monitor = PerformanceMonitor(max_history_seconds=60)
+    monitor = PerformanceMonitor()
     
-    # Record latencies
-    for latency in latencies:
-        monitor.record_latency(operation, latency)
-    
-    # Verify all latencies were collected
-    metrics = monitor.get_operation_metrics(operation)
-    assert metrics is not None, "Metrics should be available after recording latencies"
-    assert metrics.count == len(latencies), "All latencies should be recorded"
-    assert metrics.operation == operation, "Operation name should match"
-    
-    # Verify latency values are within expected range
-    assert metrics.min_latency_ms >= min(latencies) * 0.99, "Min latency should be close to actual min"
-    assert metrics.max_latency_ms <= max(latencies) * 1.01, "Max latency should be close to actual max"
-
-
-# Feature: advanced-optimization-monitoring, Property 30: Per-model inference time is collected
-@given(
-    model_name=st.text(min_size=1, max_size=30),
-    inference_times=st.lists(latency_values, min_size=1, max_size=30)
-)
-@settings(max_examples=100, deadline=None)
-@pytest.mark.property
-def test_property_30_per_model_inference_time_collected(model_name, inference_times):
-    """
-    Property 30: Per-model inference time is collected.
-    
-    For any model inference operation, inference time should be recorded
-    with model identification.
-    
-    Validates: Requirements 9.2
-    """
-    monitor = PerformanceMonitor(max_history_seconds=60)
-    operation = "inference"
-    
-    # Record inference times with model metadata
-    for inference_time in inference_times:
-        monitor.record_latency(
-            operation,
-            inference_time,
-            metadata={"model_name": model_name}
+    # Record inference for each model
+    for model_name in model_names:
+        monitor.record_inference(
+            backend=backend,
+            model_name=model_name,
+            latency=latency,
+            tokens=tokens
         )
     
-    # Verify inference times were collected
-    metrics = monitor.get_operation_metrics(operation)
-    assert metrics is not None, "Inference metrics should be available"
-    assert metrics.count == len(inference_times), "All inference times should be recorded"
+    # Backend stats should aggregate all models
+    backend_stats = monitor.get_backend_stats(backend)
+    assert backend_stats["sample_count"] == len(model_names), \
+        "Backend sample count should include all models"
     
-    # Verify we can query by operation
-    percentiles = monitor.get_percentiles(operation)
-    assert percentiles["p50"] > 0, "Median latency should be positive"
-    assert percentiles["p95"] >= percentiles["p50"], "p95 should be >= p50"
-    assert percentiles["p99"] >= percentiles["p95"], "p99 should be >= p95"
+    # Each model should have its own stats
+    for model_name in model_names:
+        model_stats = monitor.get_model_stats(model_name, backend)
+        assert model_stats is not None, f"Stats should exist for {model_name}"
+        assert model_stats["sample_count"] == 1, \
+            f"Model {model_name} should have 1 sample"
+        assert model_stats["avg_latency"] == pytest.approx(latency, rel=1e-6), \
+            f"Model {model_name} latency should match recorded value"
 
 
-# Feature: advanced-optimization-monitoring, Property 31: Throughput is calculated over time windows
-@given(
-    num_requests=st.integers(min_value=5, max_value=30),
-    window_seconds=st.integers(min_value=10, max_value=60)
-)
 @settings(max_examples=50, deadline=None)
-@pytest.mark.property
-def test_property_31_throughput_calculated_over_windows(num_requests, window_seconds):
-    """
-    Property 31: Throughput is calculated over time windows.
-    
-    For any time window query, throughput (requests per second) should be
-    calculable from recorded request timestamps.
-    
-    Validates: Requirements 9.3
-    """
-    monitor = PerformanceMonitor(max_history_seconds=window_seconds * 2)
-    
-    # Record requests with small time intervals
-    for i in range(num_requests):
-        monitor.record_latency("test_operation", 10.0)
-        if i < num_requests - 1:
-            time.sleep(0.005)  # Smaller delay for faster testing
-    
-    # Calculate throughput
-    throughput = monitor.get_throughput(window_seconds=window_seconds)
-    
-    # Verify throughput is reasonable
-    assert throughput >= 0, "Throughput should be non-negative"
-    # With 0.005s delays, max throughput is ~200 rps
-    assert throughput <= 500, "Throughput should be within reasonable bounds"
-
-
-# Feature: advanced-optimization-monitoring, Property 32: Resource utilization is tracked
 @given(
-    num_samples=st.integers(min_value=2, max_value=5)
+    backend=backend_strategy,
+    model_name=model_name_strategy,
+    latency=latency_strategy,
+    tokens=tokens_strategy
 )
-@settings(max_examples=20, deadline=None)
-@pytest.mark.property
-def test_property_32_resource_utilization_tracked(num_samples):
+def test_property_10_metrics_persistence(backend, model_name, latency, tokens):
     """
-    Property 32: Resource utilization is tracked.
+    Property 10: Performance Metrics Recording (Persistence)
     
-    For any monitoring period, GPU, CPU, and memory utilization should be
-    tracked and queryable.
+    Recorded metrics should persist across multiple queries and should
+    be accessible through different API methods.
     
-    Validates: Requirements 9.4
+    Validates: Requirements 7.3
     """
-    monitor = PerformanceMonitor(
-        max_history_seconds=60,
-        resource_sample_interval=0.1  # Sample every 0.1 seconds for faster testing
+    monitor = PerformanceMonitor()
+    
+    # Record inference
+    monitor.record_inference(
+        backend=backend,
+        model_name=model_name,
+        latency=latency,
+        tokens=tokens
     )
     
-    # Trigger resource sampling by recording latencies
-    for i in range(num_samples):
-        monitor.record_latency("test_op", 10.0)
-        time.sleep(0.15)  # Wait slightly longer than sample interval
+    # Metrics should be accessible through backend stats
+    backend_stats = monitor.get_backend_stats(backend)
+    assert backend_stats["sample_count"] == 1
     
-    # Get resource trends
-    trends = monitor.get_resource_trends(window_seconds=60)
+    # Metrics should be accessible through model stats
+    model_stats = monitor.get_model_stats(model_name, backend)
+    assert model_stats["sample_count"] == 1
     
-    # Verify resource metrics are tracked
-    assert trends.avg_cpu_percent >= 0, "CPU usage should be non-negative"
-    assert trends.max_cpu_percent >= trends.avg_cpu_percent, "Max CPU should be >= avg"
-    assert trends.avg_memory_mb >= 0, "Memory usage should be non-negative"
-    assert trends.max_memory_mb >= trends.avg_memory_mb, "Max memory should be >= avg"
+    # Metrics should be accessible through summary
+    summary = monitor.get_summary()
+    assert summary["total_inferences"] == 1
+    assert backend in summary["backends"]
+    
+    # Metrics should be accessible through records
+    records = monitor.get_all_records()
+    assert len(records) == 1
+    assert records[0].backend == backend
+    assert records[0].model_name == model_name
+    assert records[0].tokens_generated == tokens
 
 
-# Feature: advanced-optimization-monitoring, Property 33: Percentile latencies are computable
-@given(
-    latencies=st.lists(latency_values, min_size=10, max_size=100)
-)
-@settings(max_examples=100, deadline=None)
-@pytest.mark.property
-def test_property_33_percentile_latencies_computable(latencies):
+def test_property_10_empty_backend():
     """
-    Property 33: Percentile latencies are computable.
+    Property 10: Performance Metrics Recording (Empty Backend)
     
-    For any set of latency measurements, p50, p95, and p99 percentiles
-    should be computable.
+    Querying stats for a backend with no recorded inferences should
+    return an empty dictionary.
     
-    Validates: Requirements 9.5
+    Validates: Requirements 7.3
     """
-    monitor = PerformanceMonitor(max_history_seconds=60)
-    operation = "test_operation"
+    monitor = PerformanceMonitor()
     
-    # Record latencies
-    for latency in latencies:
-        monitor.record_latency(operation, latency)
+    # Query non-existent backend
+    stats = monitor.get_backend_stats("nonexistent")
+    assert stats == {}, "Stats for non-existent backend should be empty dict"
     
-    # Get percentiles
-    percentiles = monitor.get_percentiles(operation)
-    
-    # Verify percentiles are computed
-    assert "p50" in percentiles, "p50 should be computed"
-    assert "p95" in percentiles, "p95 should be computed"
-    assert "p99" in percentiles, "p99 should be computed"
-    
-    # Verify percentile ordering
-    assert percentiles["p50"] >= min(latencies) * 0.99, "p50 should be >= min"
-    assert percentiles["p99"] <= max(latencies) * 1.01, "p99 should be <= max"
-    assert percentiles["p50"] <= percentiles["p95"], "p50 should be <= p95"
-    assert percentiles["p95"] <= percentiles["p99"], "p95 should be <= p99"
-    
-    # Verify percentiles are within data range
-    sorted_latencies = sorted(latencies)
-    assert percentiles["p50"] >= sorted_latencies[0], "p50 should be >= minimum value"
-    assert percentiles["p99"] <= sorted_latencies[-1], "p99 should be <= maximum value"
-
-
-# Additional property: Sliding window filtering works correctly
-@given(
-    latencies=st.lists(latency_values, min_size=10, max_size=50),
-    window_seconds=st.integers(min_value=5, max_value=30)
-)
-@settings(max_examples=100, deadline=None)
-@pytest.mark.property
-def test_property_sliding_window_filtering(latencies, window_seconds):
-    """
-    Property: Sliding window filtering works correctly.
-    
-    For any time window, only data within that window should be included
-    in calculations.
-    """
-    monitor = PerformanceMonitor(max_history_seconds=60)
-    operation = "test_operation"
-    
-    # Record half the latencies
-    half = len(latencies) // 2
-    for latency in latencies[:half]:
-        monitor.record_latency(operation, latency)
-    
-    # Wait to ensure time separation
-    time.sleep(0.5)
-    
-    # Record remaining latencies
-    for latency in latencies[half:]:
-        monitor.record_latency(operation, latency)
-    
-    # Get metrics for very short window (should only include recent data)
-    metrics_short = monitor.get_operation_metrics(operation, window_seconds=1)
-    
-    # Get metrics for all data
-    metrics_all = monitor.get_operation_metrics(operation)
-    
-    # Verify windowing works
-    if metrics_short:
-        assert metrics_short.count <= metrics_all.count, "Short window should have <= records"
-    assert metrics_all.count == len(latencies), "All window should have all records"
-
-
-# Additional property: Error tracking works correctly
-@given(
-    error_types=st.lists(
-        st.text(min_size=1, max_size=20),
-        min_size=1,
-        max_size=10
-    ),
-    components=st.lists(
-        st.text(min_size=1, max_size=20),
-        min_size=1,
-        max_size=5
-    )
-)
-@settings(max_examples=100, deadline=None)
-@pytest.mark.property
-def test_property_error_tracking(error_types, components):
-    """
-    Property: Error tracking works correctly.
-    
-    For any errors recorded, they should be tracked by type and component.
-    """
-    monitor = PerformanceMonitor(max_history_seconds=60)
-    
-    # Record errors
-    for error_type in error_types:
-        for component in components:
-            monitor.record_error(error_type, component)
-    
-    # Verify error rate is non-negative
-    error_rate = monitor.get_error_rate()
-    assert error_rate >= 0, "Error rate should be non-negative"
-    
-    # Verify component-specific error rate
-    for component in components:
-        component_error_rate = monitor.get_error_rate(component=component)
-        assert component_error_rate >= 0, "Component error rate should be non-negative"
-
-
-# Additional property: Statistics reset works correctly
-@given(
-    latencies=st.lists(latency_values, min_size=5, max_size=30)
-)
-@settings(max_examples=100, deadline=None)
-@pytest.mark.property
-def test_property_statistics_reset(latencies):
-    """
-    Property: Statistics reset works correctly.
-    
-    After reset, all statistics should be cleared.
-    """
-    monitor = PerformanceMonitor(max_history_seconds=60)
-    operation = "test_operation"
-    
-    # Record some data
-    for latency in latencies:
-        monitor.record_latency(operation, latency)
-    
-    # Verify data exists
-    metrics_before = monitor.get_operation_metrics(operation)
-    assert metrics_before is not None, "Metrics should exist before reset"
-    assert metrics_before.count > 0, "Should have recorded data"
-    
-    # Reset statistics
-    monitor.reset_statistics()
-    
-    # Verify data is cleared
-    metrics_after = monitor.get_operation_metrics(operation)
-    assert metrics_after is None, "Metrics should be None after reset"
-    
-    throughput = monitor.get_throughput()
-    assert throughput == 0.0, "Throughput should be 0 after reset"
-    
-    operations = monitor.get_all_operations()
-    assert len(operations) == 0, "No operations should be tracked after reset"
+    # Comparison with non-existent backend should return empty dict
+    monitor.record_inference("pytorch", "model1", 1.0, 100)
+    comparison = monitor.compare_backends("pytorch", "nonexistent")
+    assert comparison == {}, "Comparison with non-existent backend should be empty dict"

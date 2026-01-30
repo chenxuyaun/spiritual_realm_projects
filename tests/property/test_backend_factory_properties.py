@@ -17,6 +17,7 @@ from unittest.mock import patch, MagicMock, Mock
 import sys
 
 from mm_orch.runtime.backend_factory import BackendFactory
+from mm_orch.runtime.backend_exceptions import ConfigurationError
 
 
 # Strategies for generating test data
@@ -59,12 +60,12 @@ class TestProperty1BackendParameterValidation:
         """
         Feature: openvino-backend-integration, Property 1: Backend Parameter Validation
         
-        Invalid backend types should be rejected with descriptive ValueError.
+        Invalid backend types should be rejected with descriptive ConfigurationError.
         """
         factory = BackendFactory()
         
-        # Invalid backend types should raise ValueError
-        with pytest.raises(ValueError) as exc_info:
+        # Invalid backend types should raise ConfigurationError
+        with pytest.raises(ConfigurationError) as exc_info:
             factory.create_backend(backend_type, device, config)
         
         # Error message should be descriptive
@@ -102,7 +103,7 @@ class TestProperty1BackendParameterValidation:
                 continue
             
             # Should reject case variations
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(ConfigurationError) as exc_info:
                 factory.create_backend(invalid_case, device, config)
             
             error_message = str(exc_info.value)
@@ -123,7 +124,7 @@ class TestProperty1BackendParameterValidation:
         factory = BackendFactory()
         
         # Try to create backend with invalid type
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ConfigurationError) as exc_info:
             factory.create_backend('invalid_backend', device, config)
         
         error_message = str(exc_info.value)
@@ -142,7 +143,7 @@ class TestProperty1BackendParameterValidation:
         """
         factory = BackendFactory()
         
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigurationError):
             factory.create_backend('', 'cpu', config)
 
 

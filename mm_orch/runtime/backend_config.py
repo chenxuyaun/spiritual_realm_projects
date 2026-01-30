@@ -10,6 +10,8 @@ import yaml
 import logging
 from typing import Dict, Any, Optional
 
+from mm_orch.runtime.backend_exceptions import ConfigurationError
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,9 +34,22 @@ class BackendConfig:
         
         Returns:
             Configuration dictionary
+            
+        Raises:
+            ConfigurationError: If configuration file is severely malformed
         """
         if not os.path.exists(self.config_path):
-            logger.info(f"Configuration file not found: {self.config_path}, using defaults")
+            logger.info(
+                f"Configuration file not found: {self.config_path}\n"
+                f"Using default configuration. To customize, create:\n"
+                f"  {self.config_path}\n\n"
+                f"Example configuration:\n"
+                f"  backend:\n"
+                f"    default: pytorch\n"
+                f"    openvino:\n"
+                f"      device: CPU\n"
+                f"      enable_fallback: true"
+            )
             return self._get_default_config()
         
         try:
@@ -42,15 +57,39 @@ class BackendConfig:
                 config = yaml.safe_load(f)
             
             if config is None:
-                logger.warning(f"Empty configuration file: {self.config_path}, using defaults")
+                logger.warning(
+                    f"Empty configuration file: {self.config_path}\n"
+                    f"Using default configuration."
+                )
                 return self._get_default_config()
             
             return self._validate_config(config)
+            
         except yaml.YAMLError as e:
-            logger.warning(f"YAML parsing error in {self.config_path}: {e}, using defaults")
+            error_msg = (
+                f"YAML parsing error in configuration file: {self.config_path}\n\n"
+                f"Error details: {str(e)}\n\n"
+                f"Troubleshooting steps:\n"
+                f"1. Check YAML syntax (indentation, colons, quotes)\n"
+                f"2. Validate YAML online: https://www.yamllint.com/\n"
+                f"3. Compare with example configuration:\n"
+                f"   backend:\n"
+                f"     default: pytorch\n"
+                f"     openvino:\n"
+                f"       device: CPU\n"
+                f"       enable_fallback: true\n\n"
+                f"4. Backup and recreate the file if needed"
+            )
+            logger.warning(error_msg)
+            logger.info("Using default configuration due to YAML error")
             return self._get_default_config()
+            
         except Exception as e:
-            logger.warning(f"Config loading failed: {e}, using defaults")
+            error_type = type(e).__name__
+            logger.warning(
+                f"Configuration loading failed: {error_type}: {str(e)}\n"
+                f"Using default configuration."
+            )
             return self._get_default_config()
     
     def _get_default_config(self) -> Dict[str, Any]:

@@ -46,8 +46,9 @@ class TestOpenVINOBackendInitialization:
         """Test initialization fails when OpenVINO is unavailable and fallback is disabled."""
         with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager', side_effect=ImportError("OpenVINO not found")):
             from mm_orch.runtime.openvino_backend import OpenVINOBackend
+            from mm_orch.runtime.backend_exceptions import BackendInitializationError
             
-            with pytest.raises(RuntimeError) as exc_info:
+            with pytest.raises(BackendInitializationError) as exc_info:
                 backend = OpenVINOBackend(device='CPU', config={'enable_fallback': False})
             
             assert "openvino" in str(exc_info.value).lower()
@@ -130,11 +131,12 @@ class TestOpenVINOBackendModelLoading:
             mock_manager_class.return_value = mock_manager
             
             from mm_orch.runtime.openvino_backend import OpenVINOBackend
+            from mm_orch.runtime.backend_exceptions import ModelLoadError
             
             backend = OpenVINOBackend(device='CPU', config={'enable_fallback': False})
             
             with patch('os.path.exists', return_value=False):
-                with pytest.raises(FileNotFoundError) as exc_info:
+                with pytest.raises(ModelLoadError) as exc_info:
                     backend.load_model('gpt2', 'models/gpt2', 'transformers')
                 
                 assert "openvino" in str(exc_info.value).lower()
@@ -391,3 +393,311 @@ class TestOpenVINOBackendHelperMethods:
                 backend = OpenVINOBackend(device='CPU', config={'enable_fallback': True})
                 
                 assert backend.is_available() == False
+
+
+class TestOpenVINOBackendDeviceSelection:
+    """Test device selection and validation scenarios."""
+    
+    def test_valid_device_cpu(self):
+        """Test initialization with valid CPU device."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            from mm_orch.runtime.openvino_backend import OpenVINOBackend
+            
+            backend = OpenVINOBackend(device='CPU', config={'enable_fallback': True})
+            
+            assert backend.device == 'CPU'
+            # Verify OpenVINO manager was initialized with CPU device
+            call_kwargs = mock_manager_class.call_args[1]
+            assert call_kwargs['default_device'] == 'CPU'
+    
+    def test_valid_device_gpu(self):
+        """Test initialization with valid GPU device."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            # Mock OpenVINO Core to report GPU available
+            with patch('openvino.Core') as mock_core_class:
+                mock_core = Mock()
+                mock_core.available_devices = ['CPU', 'GPU.0']
+                mock_core_class.return_value = mock_core
+                
+                from mm_orch.runtime.openvino_backend import OpenVINOBackend
+                
+                backend = OpenVINOBackend(device='GPU', config={'enable_fallback': True})
+                
+                assert backend.device == 'GPU'
+                # Verify OpenVINO manager was initialized with GPU device
+                call_kwargs = mock_manager_class.call_args[1]
+                assert call_kwargs['default_device'] == 'GPU'
+    
+    def test_valid_device_auto(self):
+        """Test initialization with AUTO device selection."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            from mm_orch.runtime.openvino_backend import OpenVINOBackend
+            
+            backend = OpenVINOBackend(device='AUTO', config={'enable_fallback': True})
+            
+            assert backend.device == 'AUTO'
+            # Verify OpenVINO manager was initialized with AUTO device
+            call_kwargs = mock_manager_class.call_args[1]
+            assert call_kwargs['default_device'] == 'AUTO'
+    
+    def test_valid_device_npu(self):
+        """Test initialization with NPU device."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            # Mock OpenVINO Core to report NPU available
+            with patch('openvino.Core') as mock_core_class:
+                mock_core = Mock()
+                mock_core.available_devices = ['CPU', 'NPU.0']
+                mock_core_class.return_value = mock_core
+                
+                from mm_orch.runtime.openvino_backend import OpenVINOBackend
+                
+                backend = OpenVINOBackend(device='NPU', config={'enable_fallback': True})
+                
+                assert backend.device == 'NPU'
+                # Verify OpenVINO manager was initialized with NPU device
+                call_kwargs = mock_manager_class.call_args[1]
+                assert call_kwargs['default_device'] == 'NPU'
+    
+    def test_invalid_device_raises_error(self):
+        """Test that invalid device names raise ConfigurationError."""
+        from mm_orch.runtime.openvino_backend import OpenVINOBackend
+        from mm_orch.runtime.backend_exceptions import ConfigurationError
+        
+        with pytest.raises(ConfigurationError) as exc_info:
+            backend = OpenVINOBackend(device='INVALID', config={'enable_fallback': True})
+        
+        error_message = str(exc_info.value)
+        assert 'INVALID' in error_message
+        assert 'CPU' in error_message
+        assert 'GPU' in error_message
+    
+    def test_device_case_insensitive(self):
+        """Test that device names are case-insensitive."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            from mm_orch.runtime.openvino_backend import OpenVINOBackend
+            
+            # Test lowercase
+            backend1 = OpenVINOBackend(device='cpu', config={'enable_fallback': True})
+            assert backend1.device == 'CPU'
+            
+            # Test mixed case
+            backend2 = OpenVINOBackend(device='Gpu', config={'enable_fallback': True})
+            assert backend2.device == 'GPU'
+
+
+class TestOpenVINOBackendDeviceFallback:
+    """Test device fallback scenarios."""
+    
+    def test_gpu_fallback_to_cpu_when_unavailable(self):
+        """Test that GPU falls back to CPU when GPU is not available."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            # Mock OpenVINO Core to report only CPU available
+            with patch('openvino.Core') as mock_core_class:
+                mock_core = Mock()
+                mock_core.available_devices = ['CPU']  # No GPU
+                mock_core_class.return_value = mock_core
+                
+                from mm_orch.runtime.openvino_backend import OpenVINOBackend
+                
+                backend = OpenVINOBackend(device='GPU', config={'enable_fallback': True})
+                
+                # Device should have fallen back to CPU
+                assert backend.device == 'CPU'
+                # Verify OpenVINO manager was initialized with CPU device
+                call_kwargs = mock_manager_class.call_args[1]
+                assert call_kwargs['default_device'] == 'CPU'
+    
+    def test_npu_fallback_to_cpu_when_unavailable(self):
+        """Test that NPU falls back to CPU when NPU is not available."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            # Mock OpenVINO Core to report only CPU available
+            with patch('openvino.Core') as mock_core_class:
+                mock_core = Mock()
+                mock_core.available_devices = ['CPU']  # No NPU
+                mock_core_class.return_value = mock_core
+                
+                from mm_orch.runtime.openvino_backend import OpenVINOBackend
+                
+                backend = OpenVINOBackend(device='NPU', config={'enable_fallback': True})
+                
+                # Device should have fallen back to CPU
+                assert backend.device == 'CPU'
+                # Verify OpenVINO manager was initialized with CPU device
+                call_kwargs = mock_manager_class.call_args[1]
+                assert call_kwargs['default_device'] == 'CPU'
+    
+    def test_cpu_no_fallback_needed(self):
+        """Test that CPU device doesn't trigger fallback (always available)."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            from mm_orch.runtime.openvino_backend import OpenVINOBackend
+            
+            backend = OpenVINOBackend(device='CPU', config={'enable_fallback': True})
+            
+            # Device should remain CPU (no fallback)
+            assert backend.device == 'CPU'
+            # Verify OpenVINO manager was initialized with CPU device
+            call_kwargs = mock_manager_class.call_args[1]
+            assert call_kwargs['default_device'] == 'CPU'
+    
+    def test_auto_no_fallback_needed(self):
+        """Test that AUTO device doesn't trigger fallback."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            from mm_orch.runtime.openvino_backend import OpenVINOBackend
+            
+            backend = OpenVINOBackend(device='AUTO', config={'enable_fallback': True})
+            
+            # Device should remain AUTO (no fallback)
+            assert backend.device == 'AUTO'
+            # Verify OpenVINO manager was initialized with AUTO device
+            call_kwargs = mock_manager_class.call_args[1]
+            assert call_kwargs['default_device'] == 'AUTO'
+    
+    def test_device_fallback_logs_warning(self):
+        """Test that device fallback logs a warning message."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            # Mock OpenVINO Core to report only CPU available
+            with patch('openvino.Core') as mock_core_class:
+                mock_core = Mock()
+                mock_core.available_devices = ['CPU']
+                mock_core_class.return_value = mock_core
+                
+                with patch('mm_orch.runtime.openvino_backend.logger') as mock_logger:
+                    from mm_orch.runtime.openvino_backend import OpenVINOBackend
+                    
+                    backend = OpenVINOBackend(device='GPU', config={'enable_fallback': True})
+                    
+                    # Verify warning was logged
+                    assert mock_logger.warning.called
+                    warning_message = mock_logger.warning.call_args[0][0]
+                    assert 'GPU' in warning_message
+                    assert 'not available' in warning_message
+                    assert 'CPU' in warning_message
+    
+    def test_device_availability_check_with_openvino_not_installed(self):
+        """Test device availability check when OpenVINO is not installed."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager', side_effect=ImportError("OpenVINO not found")):
+            with patch('mm_orch.runtime.pytorch_backend.PyTorchBackend') as mock_pytorch_class:
+                mock_pytorch = Mock()
+                mock_pytorch_class.return_value = mock_pytorch
+                
+                # Mock openvino import to fail
+                with patch('openvino.Core', side_effect=ImportError("OpenVINO not installed")):
+                    from mm_orch.runtime.openvino_backend import OpenVINOBackend
+                    
+                    # Should not raise error, should fall back to PyTorch
+                    backend = OpenVINOBackend(device='GPU', config={'enable_fallback': True})
+                    
+                    # Should have fallen back to PyTorch backend
+                    assert backend._fallback_backend is not None
+                    assert backend._openvino_manager is None
+
+
+class TestOpenVINOBackendDeviceValidation:
+    """Test device validation methods."""
+    
+    def test_validate_device_normalizes_to_uppercase(self):
+        """Test that _validate_device normalizes device names to uppercase."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            from mm_orch.runtime.openvino_backend import OpenVINOBackend
+            
+            backend = OpenVINOBackend(device='cpu', config={'enable_fallback': True})
+            
+            # Device should be normalized to uppercase
+            assert backend.device == 'CPU'
+    
+    def test_check_device_availability_cpu_always_available(self):
+        """Test that CPU is always reported as available."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            from mm_orch.runtime.openvino_backend import OpenVINOBackend
+            
+            backend = OpenVINOBackend(device='CPU', config={'enable_fallback': True})
+            
+            # CPU should always be available
+            assert backend._check_device_availability('CPU') == True
+    
+    def test_check_device_availability_auto_always_available(self):
+        """Test that AUTO is always reported as available."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            from mm_orch.runtime.openvino_backend import OpenVINOBackend
+            
+            backend = OpenVINOBackend(device='CPU', config={'enable_fallback': True})
+            
+            # AUTO should always be available
+            assert backend._check_device_availability('AUTO') == True
+    
+    def test_check_device_availability_gpu_when_present(self):
+        """Test GPU availability check when GPU is present."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            # Mock OpenVINO Core to report GPU available
+            with patch('openvino.Core') as mock_core_class:
+                mock_core = Mock()
+                mock_core.available_devices = ['CPU', 'GPU.0']
+                mock_core_class.return_value = mock_core
+                
+                from mm_orch.runtime.openvino_backend import OpenVINOBackend
+                
+                backend = OpenVINOBackend(device='CPU', config={'enable_fallback': True})
+                
+                # GPU should be reported as available
+                assert backend._check_device_availability('GPU') == True
+    
+    def test_check_device_availability_gpu_when_absent(self):
+        """Test GPU availability check when GPU is not present."""
+        with patch('mm_orch.runtime.openvino_manager.OpenVINOModelManager') as mock_manager_class:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            
+            # Mock OpenVINO Core to report only CPU available
+            with patch('openvino.Core') as mock_core_class:
+                mock_core = Mock()
+                mock_core.available_devices = ['CPU']  # No GPU
+                mock_core_class.return_value = mock_core
+                
+                from mm_orch.runtime.openvino_backend import OpenVINOBackend
+                
+                backend = OpenVINOBackend(device='CPU', config={'enable_fallback': True})
+                
+                # GPU should be reported as not available
+                assert backend._check_device_availability('GPU') == False

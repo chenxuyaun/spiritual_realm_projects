@@ -675,6 +675,8 @@ class TestModelManagerEnhancedFeatures:
             }
             mock_tokenizer.batch_decode.return_value = ["test output"]
             mock_tokenizer.pad_token_id = 0
+            # Mock encode to return a list (needed for len() call in performance monitoring)
+            mock_tokenizer.encode.return_value = [1, 2, 3, 4, 5]
             
             # Mock model generate with a small delay to simulate inference
             def mock_generate(*args, **kwargs):

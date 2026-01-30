@@ -9,6 +9,10 @@ import logging
 from typing import Dict, Any, List
 
 from mm_orch.runtime.inference_backend import InferenceBackend
+from mm_orch.runtime.backend_exceptions import (
+    BackendInitializationError,
+    ConfigurationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +49,8 @@ class BackendFactory:
             An instance of InferenceBackend (PyTorchBackend or OpenVINOBackend).
             
         Raises:
-            ValueError: If backend_type is not 'pytorch' or 'openvino'.
-            RuntimeError: If backend initialization fails.
+            ConfigurationError: If backend_type is not 'pytorch' or 'openvino'.
+            BackendInitializationError: If backend initialization fails.
             
         Example:
             >>> factory = BackendFactory()
@@ -56,10 +60,20 @@ class BackendFactory:
         """
         # Validate backend_type parameter
         if backend_type not in ['pytorch', 'openvino']:
-            raise ValueError(
-                f"Invalid backend type: '{backend_type}'. "
-                f"Supported backends: 'pytorch', 'openvino'. "
-                f"Available backends on this system: {self.get_available_backends()}"
+            available = self.get_available_backends()
+            raise ConfigurationError(
+                f"Invalid backend type: '{backend_type}'.\n\n"
+                f"Supported backend types: 'pytorch', 'openvino'\n"
+                f"Available backends on this system: {', '.join(available) if available else '(none)'}\n\n"
+                f"Backend descriptions:\n"
+                f"  - pytorch: Use PyTorch for inference (CPU or CUDA)\n"
+                f"  - openvino: Use OpenVINO for accelerated CPU/GPU inference\n\n"
+                f"Installation instructions:\n"
+                f"  PyTorch:  pip install torch\n"
+                f"  OpenVINO: pip install openvino openvino-dev\n\n"
+                f"Example usage:\n"
+                f"  factory = BackendFactory()\n"
+                f"  backend = factory.create_backend('pytorch', 'cpu', {{}})"
             )
         
         # Create PyTorch backend
@@ -69,13 +83,32 @@ class BackendFactory:
                 logger.info(f"Creating PyTorch backend with device: {device}")
                 return PyTorchBackend(device, config)
             except ImportError as e:
-                raise RuntimeError(
-                    f"Failed to create PyTorch backend: {e}. "
-                    f"Please ensure PyTorch is installed: pip install torch"
+                raise BackendInitializationError(
+                    f"Failed to create PyTorch backend: PyTorch is not installed.\n\n"
+                    f"Installation instructions:\n"
+                    f"1. Install PyTorch (CPU version):\n"
+                    f"   pip install torch torchvision torchaudio\n\n"
+                    f"2. Install PyTorch (GPU version with CUDA):\n"
+                    f"   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118\n\n"
+                    f"3. Verify installation:\n"
+                    f"   python -c \"import torch; print(torch.__version__)\"\n\n"
+                    f"For more information, visit:\n"
+                    f"https://pytorch.org/get-started/locally/"
                 ) from e
             except Exception as e:
-                raise RuntimeError(
-                    f"Failed to initialize PyTorch backend: {e}"
+                error_type = type(e).__name__
+                raise BackendInitializationError(
+                    f"Failed to initialize PyTorch backend.\n\n"
+                    f"Error type: {error_type}\n"
+                    f"Error details: {str(e)}\n\n"
+                    f"Troubleshooting steps:\n"
+                    f"1. Verify PyTorch is properly installed:\n"
+                    f"   pip install --upgrade torch\n\n"
+                    f"2. Check device parameter is valid:\n"
+                    f"   - For CPU: device='cpu'\n"
+                    f"   - For GPU: device='cuda' (requires CUDA installation)\n\n"
+                    f"3. Check for conflicting packages:\n"
+                    f"   pip list | grep torch"
                 ) from e
         
         # Create OpenVINO backend
@@ -85,14 +118,41 @@ class BackendFactory:
                 logger.info(f"Creating OpenVINO backend with device: {device}")
                 return OpenVINOBackend(device, config)
             except ImportError as e:
-                raise RuntimeError(
-                    f"Failed to create OpenVINO backend: {e}. "
-                    f"OpenVINO is not installed. Install with: "
-                    f"pip install openvino openvino-dev"
+                raise BackendInitializationError(
+                    f"Failed to create OpenVINO backend: OpenVINO is not installed.\n\n"
+                    f"Installation instructions:\n"
+                    f"1. Install OpenVINO runtime:\n"
+                    f"   pip install openvino\n\n"
+                    f"2. Install OpenVINO development tools (for model export):\n"
+                    f"   pip install openvino-dev\n\n"
+                    f"3. Install Optimum Intel (for transformers integration):\n"
+                    f"   pip install optimum[openvino]\n\n"
+                    f"4. Verify installation:\n"
+                    f"   python -c \"import openvino; print(openvino.__version__)\"\n\n"
+                    f"Alternative: Use PyTorch backend instead:\n"
+                    f"  factory.create_backend('pytorch', 'cpu', {{}})\n\n"
+                    f"For more information, visit:\n"
+                    f"https://docs.openvino.ai/latest/openvino_docs_install_guides_overview.html"
                 ) from e
             except Exception as e:
-                raise RuntimeError(
-                    f"Failed to initialize OpenVINO backend: {e}"
+                error_type = type(e).__name__
+                raise BackendInitializationError(
+                    f"Failed to initialize OpenVINO backend.\n\n"
+                    f"Error type: {error_type}\n"
+                    f"Error details: {str(e)}\n\n"
+                    f"Troubleshooting steps:\n"
+                    f"1. Verify OpenVINO is properly installed:\n"
+                    f"   pip install --upgrade openvino openvino-dev\n\n"
+                    f"2. Check device parameter is valid for OpenVINO:\n"
+                    f"   - CPU: Always available\n"
+                    f"   - GPU: Requires Intel GPU drivers\n"
+                    f"   - AUTO: Let OpenVINO choose automatically\n"
+                    f"   - NPU: Intel Core Ultra processors only\n\n"
+                    f"3. Enable fallback to PyTorch:\n"
+                    f"   config = {{'enable_fallback': True}}\n"
+                    f"   backend = factory.create_backend('openvino', 'CPU', config)\n\n"
+                    f"4. Use PyTorch backend as alternative:\n"
+                    f"   backend = factory.create_backend('pytorch', 'cpu', {{}})"
                 ) from e
     
     def get_available_backends(self) -> List[str]:
